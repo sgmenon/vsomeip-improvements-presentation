@@ -531,3 +531,8 @@
 	color: var(--muted);
 	font-family: var(--r-code-font);
 }
+
+/* In the PDF every fragment is shown, so drop the ones that fade out */
+html.reveal-print .reveal .fragment.fade-out {
+	display: none;
+}
