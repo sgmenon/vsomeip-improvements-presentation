@@ -43,12 +43,12 @@
 				<section>
 					<h2>Agenda</h2>
 					<ol class="tight">
-						<li><a href="#/2">The ADAS Use Case</a>: where SOME/IP sits in GM's ADAS stack</li>
-						<li><a href="#/3">Today's data path</a>: counting the copies</li>
-						<li><a href="#/4">Data Ownership</a>: Separating discovery from data ownership</li>
-						<li><a href="#/5">E2E</a>: scatter-gather protect and span-based check</li>
-						<li><a href="#/6">API style</a>: <code>shared_ptr</code> owns, views borrow</li>
-						<li><a href="#/7">Threads</a>: strands instead of mutexes</li>
+						<li><a href="#/2">The ADAS Use Case</a>: Where SOME/IP sits in GM's ADAS stack</li>
+						<li><a href="#/3">Today's data path</a>: Counting the copies</li>
+						<li><a href="#/4">Fix 1: Data Ownership</a>: Separating discovery from data ownership</li>
+						<li><a href="#/5">Fix 2: E2E</a>: scatter-gather protect and span-based check</li>
+						<li><a href="#/6">Fix 3: API style</a>: <code>shared_ptr</code> owns, views borrow</li>
+						<li><a href="#/7">Fix 4: Better thread handling</a>: strands instead of mutexes</li>
 						<li><a href="#/8">What we'd like to upstream</a></li>
 					</ol>
 					<aside class="notes">
@@ -225,7 +225,7 @@
 						</div>
 					</section>
 
-					<section>
+					<section id="copies-send">
 						<p class="kicker">Data path · send</p>
 						<h2>Proxy app → routing manager → wire</h2>
 						<div class="diagram">
@@ -288,7 +288,7 @@
 						</aside>
 					</section>
 
-					<section>
+					<section id="copies-receive">
 						<p class="kicker">Data path · receive</p>
 						<h2>Wire → routing manager → proxy app</h2>
 						<div class="diagram">
@@ -470,72 +470,75 @@
 						<div class="cols wide-left">
 							<div class="diagram">
 								<div class="flow">
+									<div class="blk wire" style="flex: 0.7; align-self: center"><span class="t">Remote ECUs</span></div>
+									<div class="arr" style="flex-basis: 3em; font-size: 0.9em">⇄<br />eth</div>
+									<div class="lane hot" style="flex: 1.2">
+										<span class="lane-label">Routing manager</span>
+										<div class="blk"><span class="t">every SOME/IP socket</span><span class="s">+ SD on 30490*</span></div>
+									</div>
+									<div class="arr hop" style="flex-basis: 3.5em; font-size: 0.9em">⇄<br />UDS<br /><span class="cp kern">K</span><span class="cp kern">K</span></div>
 									<div class="flow vert" style="flex: 1; gap: 0.4em">
 										<div class="blk"><span class="t">App A</span><span class="s">proxy</span></div>
 										<div class="blk"><span class="t">App B</span><span class="s">proxy</span></div>
 										<div class="blk"><span class="t">App C</span><span class="s">proxy</span></div>
 									</div>
-									<div class="arr hop" style="flex-basis: 3.5em; font-size: 0.9em">⇄<br />UDS<br /><span class="cp kern">K</span><span class="cp kern">K</span></div>
-									<div class="lane hot" style="flex: 1.2">
-										<span class="lane-label">Routing manager</span>
-										<div class="blk"><span class="t">every SOME/IP socket</span><span class="s">+ SD on 30490*</span></div>
-									</div>
-									<div class="arr" style="flex-basis: 3em; font-size: 0.9em">⇄<br />eth</div>
-									<div class="blk wire" style="flex: 0.7; align-self: center"><span class="t">Remote ECUs</span></div>
 								</div>
 							</div>
 							<ul class="fs-sm tight">
-								<li><b>Every byte crosses the RM:</b> two kernel copies plus the userspace copies around them.</li>
-								<li><b>Single point of failure:</b> if the OOM killer picks the RM, every SOME/IP flow on the ECU stops.</li>
-								<li><b>Wrong owner for socket settings:</b> <code>SO_RCVBUF</code>, DSCP, receive thread affinity and back-pressure depend on the payload. The RM can't tune them per consumer.</li>
+								<li class="fragment"><b>Every byte crosses the RM:</b> two kernel copies plus the userspace copies around them.</li>
+								<li class="fragment"><b>Single point of failure:</b> if the OOM killer picks the RM, every SOME/IP flow on the ECU stops.</li>
+								<li class="fragment"><b>Wrong owner for socket settings:</b> <code>SO_RCVBUF</code>, DSCP, receive thread affinity and back-pressure depend on the payload. The RM can't tune them per consumer.</li>
 							</ul>
 						</div>
-						<div class="takeaway">
+						<div class="takeaway fragment">
 							We want the process that consumes the data to <b>own the socket</b>. In practice, every
 							large-data app becomes its own routing manager.
 						</div>
 						<aside class="notes">
-							vsomeip's shared-memory transport exists but has been fragile for us, so we don't use it.
+							vsomeip3 has no shared-memory transport: local traffic between apps and the routing manager
+							goes over Unix domain sockets (or local TCP).
 							Subspace already covers local distribution.
 						</aside>
 					</section>
 
 					<section>
 						<p class="kicker">Data Ownership</p>
-						<h2>Why several routing managers break service discovery</h2>
-						<div class="cols wide-left">
-							<div class="diagram">
-								<div class="flow">
-									<div class="blk wire" style="flex: 0.8; align-self: center">
-										<span class="t">Remote ECU</span><span class="s">SubscribeEventgroup(S2)<br />unicast → :30490*</span>
-									</div>
-									<div class="arr" style="flex-basis: 2.5em">→</div>
-									<div class="blk ghost" style="flex: 0.8; align-self: center">
-										<span class="t">Kernel</span><span class="s">3 sockets bound to :30490* with SO_REUSEADDR</span>
-									</div>
-									<div class="arr" style="flex-basis: 2.5em">→</div>
-									<div class="flow vert" style="flex: 1; gap: 0.35em">
-										<div class="blk"><span class="t">RM A · offers S1</span><span class="s">&nbsp;</span></div>
-										<div class="blk"><span class="t">RM B · offers S2</span><span class="s">never sees it</span></div>
-										<div class="blk" style="border-color: var(--ineff)">
-											<span class="t">RM C · offers S3</span><span class="s red">no eventgroupinfo → drop / NACK</span>
-										</div>
-									</div>
-								</div>
+						<h2>Can we just have multiple routing managers on the SoC?</h2>
+						<div class="tiles mt">
+							<div class="tile red fragment" style="padding: 0.8em">
+								<span class="big">Not really</span>
+								<span class="lbl" style="font-size: 0.7em">It breaks service discovery</span>
 							</div>
-							<div class="fs-sm">
-								<p><span class="check">✓</span> <b>Multicast</b> OFFER and FIND are copied to every bound socket, so they work.</p>
-								<p><span class="x">✗</span> <b>Unicast</b> datagrams go to <i>one</i> socket only:</p>
-								<ul class="tight">
-									<li><code>SubscribeEventgroup</code> and its ACK</li>
-									<li>A unicast OFFER answering our FIND</li>
-								</ul>
-								<p>These usually land on an RM that doesn't own the service.</p>
+							<div class="tile fragment" style="padding: 0.8em">
+								<span class="big">:30490</span>
+								<span class="lbl" style="font-size: 0.7em">It's common in automotive to do SD on UDP port 30490, so every routing manager would bind the same port</span>
 							</div>
 						</div>
-						<div class="takeaway warn">
-							SOME/IP-SD puts every unicast on the <b>SD port</b>, so you can't run several SD participants
-							on one ECU address.
+					</section>
+
+					<section>
+						<p class="kicker">Data Ownership</p>
+						<h2>How several routing managers break service discovery</h2>
+						<div class="cols wide-left">
+							<div class="r-stack fragment" data-fragment-index="1">
+								<img class="fragment fade-out" data-fragment-index="2" src="talk/img/multiple-rm-offer-sd.drawio.svg" alt="A multicast OFFER reaches every routing manager bound to port 30490" style="width: 100%" />
+								<img class="fragment" data-fragment-index="2" src="talk/img/multiple-rm-subscribe-sd.drawio.svg" alt="A unicast SUBSCRIBE ACK reaches only one of the routing managers, chosen by the kernel" style="width: 100%" />
+							</div>
+							<div class="fs-sm">
+								<p class="fragment" data-fragment-index="1"><span class="check">✓</span> <b>Multicast</b> OFFER and FIND are copied to every bound socket, so they work.</p>
+								<div class="fragment" data-fragment-index="2">
+									<p><span class="x">✗</span> <b>Unicast</b> datagrams go to <i>one</i> socket only:</p>
+									<ul class="tight">
+										<li><code>SubscribeEventgroup</code> and its ACK</li>
+										<li>A unicast OFFER answering our FIND</li>
+									</ul>
+									<p>These usually land on an RM that doesn't own the service.</p>
+								</div>
+							</div>
+						</div>
+						<div class="takeaway warn fragment" data-fragment-index="3">
+							At least Service Discovery needs to be done by a single process. <br />
+							This is just how <code>SO_REUSEADDR</code> works in POSIX sockets.
 						</div>
 						<aside class="notes">
 							vsomeip binds the SD socket with SO_REUSEADDR (udp_server_endpoint_impl.cpp:92) so every RM can
@@ -548,8 +551,11 @@
 
 					<section>
 						<p class="kicker">Data Ownership</p>
-						<h2>The principle: discovery and socket ownership are separate jobs</h2>
-						<div class="cols">
+						<h2>The Solution</h2>
+						<div>
+							<span class="big">Separate discovery and socket ownership</span>
+						</div>
+						<div class="cols fragment">
 							<div class="lane solid">
 								<span class="lane-label">Discovery authority: one per ECU</span>
 								<ul class="fs-sm tight">
@@ -567,6 +573,8 @@
 								</ul>
 							</div>
 						</div>
+						<div class="fragment" style="margin-top: 1em">
+						<div>This also provides crash isolation (one of our safety requirements)</div>
 						<table style="width: 100%; margin-top: 0.8em">
 							<tr>
 								<th>If this crashes…</th>
@@ -574,67 +582,34 @@
 								<th>Split design</th>
 							</tr>
 							<tr>
-								<td>The routing manager / SD authority</td>
+								<td>Single routing manager / SD authority</td>
 								<td class="red">All SOME/IP on the ECU stops</td>
-								<td class="green">Existing flows continue; only relearning is paused</td>
+								<td class="green">Existing flows continue; only new discovery is paused</td>
 							</tr>
 							<tr>
-								<td>One large-data app</td>
-								<td class="muted">Its flows stop</td>
-								<td class="muted">Its flows stop; nobody else is affected</td>
+								<td>Large-data Client Application</td>
+								<td class="red">Flow stops; but UDP socket in RM is open</td>
+								<td class="green">Flows stop; socket is closed</td>
 							</tr>
 						</table>
-						<div class="takeaway">
-							This separation supports our safety case: a component that isn't built to ASIL integrity
-							never sits in the path of an ASIL flow.
+						</div>
+						<div class="takeaway fragment">
+							This separation adds efficiency and safety.
 						</div>
 					</section>
 
 					<section>
 						<p class="kicker">Data Ownership · GM design</p>
 						<h2>Active and passive SD plugins</h2>
-						<div class="diagram">
-							<div class="flow" style="gap: 0.6em; align-items: stretch">
-								<div class="lane ok" style="flex: 1.15">
-									<span class="lane-label">SD broker process: the only socket on :30490*</span>
-									<div class="flow vert" style="gap: 0.3em">
-										<div class="blk accent"><span class="t">Active gm_sd plugin</span><span class="s">state machine · learning table</span></div>
-										<div class="blk"><span class="t">Custom service_discovery_host</span><span class="s">answers from the system manifest</span></div>
-										<div class="blk"><span class="t">service_discovery_impl</span><span class="s">unmodified vsomeip</span></div>
-									</div>
-								</div>
-								<div class="flow vert" style="flex: 0.55; justify-content: center; text-align: center; gap: 0.4em">
-									<div class="blk ghost"><span class="t">/persist/…/learning_table.json</span><span class="s">one table per device</span></div>
-									<div class="arr down">→ "table ready" over Subspace →</div>
-								</div>
-								<div class="flow vert" style="flex: 1; gap: 0.4em">
-									<div class="lane">
-										<span class="lane-label">App A: its own RM</span>
-										<div class="flow">
-											<div class="blk"><span class="t">Passive plugin</span><span class="s">filter by manifest, replay</span></div>
-											<div class="arr">→</div>
-											<div class="blk"><span class="t">routing_manager_impl</span><span class="s">owns data ports</span></div>
-										</div>
-									</div>
-									<div class="lane">
-										<span class="lane-label">App B: its own RM</span>
-										<div class="flow">
-											<div class="blk"><span class="t">Passive plugin</span><span class="s">no SD traffic</span></div>
-											<div class="arr">→</div>
-											<div class="blk"><span class="t">routing_manager_impl</span><span class="s">owns data ports</span></div>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-						<ul class="fs-xs tight">
-							<li><b>Broker</b> sends OFFER/FIND for every app from the manifest, receives every unicast Subscribe, and writes one device-wide learning table.</li>
-							<li><b>Each RM</b> loads the table, keeps its own entries, and replays them with <code>add_routing_info</code> / <code>on_remote_subscribe</code>. Events flow straight from the app's ports to remote subscribers.</li>
+						<img class="fragment" src="talk/img/sd-plugins.drawio.svg" alt="SD broker with the active plugin, sending socket updates to apps that are their own routing managers" style="display: block; margin: 0 auto; max-height: 340px" />
+						<ul class="fs-xs tight fragment" style="margin-top: 1em">
+							<li><b>Active plugin</b> (in the SD broker): owns the SD port and speaks SOME/IP-SD on behalf of every app on the device.</li>
+							<li><b>Passive plugin</b> (in each app's RM): receives socket updates from the active plugin and applies them. Events flow straight from the app's ports to remote subscribers.</li>
 						</ul>
 						<aside class="notes">
-							Source: cruise/someip/gm_sd (README). The broker isn't a vsomeip application: it has no
-							routing manager, no local IPC, and no service ports. All it needs from vsomeip is
-							service_discovery_impl plus some implementation of service_discovery_host.
+							The broker isn't a vsomeip application: it has no routing manager, no local IPC, and no
+							service ports. All it needs from vsomeip is service_discovery_impl plus some implementation
+							of service_discovery_host.
 						</aside>
 					</section>
 
@@ -642,31 +617,23 @@
 						<p class="kicker">Data Ownership · GM design</p>
 						<h2>Lifecycle</h2>
 						<div class="tiles" style="font-size: 0.95em">
-							<div class="tile" style="text-align: left">
-								<b class="blue">Cold boot</b>
-								<p class="fs-xs">No table on disk. The broker learns from the wire, writes the table, and publishes "table ready". Each RM loads and replays it.</p>
+							<div class="tile fragment" style="text-align: left">
+								<b class="blue">Discovery</b>
+								<p class="fs-xs">The broker runs SOME/IP-SD. As offers and subscriptions arrive, the active plugin sends socket updates to the passive plugins.</p>
 							</div>
-							<div class="tile" style="text-align: left">
+							<div class="tile fragment" style="text-align: left">
 								<b class="blue">Steady state</b>
-								<p class="fs-xs">The SD port is <b>silent</b>. RMs notify prelearned subscribers directly and the broker is out of the data path.</p>
+								<p class="fs-xs">Each RM transfers Events and Method data to <em>Subspace</em> (recall it is 0 copy) from its own ports.</p>
 							</div>
-							<div class="tile" style="text-align: left">
-								<b class="blue">Relearn (RID 0x0654)</b>
-								<p class="fs-xs">A diagnostic request triggers a fresh learning session. RMs keep the last good table until the new one is on disk.</p>
-							</div>
-							<div class="tile" style="text-align: left">
+							<div class="tile fragment" style="text-align: left">
 								<b class="blue">Broker crash</b>
-								<p class="fs-xs">RMs keep running on their tables. The supervisor restarts the broker, which reloads from disk.</p>
+								<p class="fs-xs">RMs keep their sockets and existing flows. The supervisor restarts the broker, and updates resume.</p>
 							</div>
-						</div>
-						<div class="takeaway">
-							Crash isolation comes from the structure: the SD authority never owns a data port, and a data
-							owner never owns the SD port.
 						</div>
 						<aside class="notes">
-							The learning-table model is specific to GM's SDV SD extension. The general point, and what
-							we'd like upstream, is that vsomeip's SD should be usable from a process that isn't a
-							routing manager.
+							How the active plugin and the passive plugins exchange updates is GM-specific. The general
+							point, and what we'd like upstream, is that vsomeip's SD should be usable from a process that
+							isn't a routing manager.
 						</aside>
 					</section>
 
@@ -674,20 +641,15 @@
 						<p class="kicker">Data Ownership · upstream ask #1</p>
 						<h2>Standalone service discovery</h2>
 						<div class="cols wide-right">
-							<div class="fs-sm">
-								<p><b>Why not <code>protocol=external</code>?</b></p>
+							<div class="fs-sm fragment">
+								<p><b>The SD app could have been a RM with <code>protocol=external</code> service, but we didn't do that.</b></p>
 								<ul class="tight fs-sm">
-									<li>It still registers a full <code>application_impl</code> with an RM</li>
-									<li>It still creates UDS endpoints and netlink, and runs the RM's security checks</li>
-									<li>It still needs a separate SD plugin</li>
-								</ul>
-								<p class="mt"><b>What blocks a standalone SD host today</b></p>
-								<ul class="tight fs-sm">
-									<li><code>runtime_impl</code> ties the message factories to the application factory</li>
-									<li>So <code>libvsomeip3.so</code> is all or nothing</li>
+									<li>With this design, the standalone SD can be made using only <code>vsomeip3-sd</code> and some custom asio code</li>
+									<li>We did this by fully decoupling <code>vsomeip3.so</code> from <code>vsomeip3-sd.so</code></li>
+									<li>Far simpler binary</li>
 								</ul>
 							</div>
-							<div>
+							<div class="fragment">
 								<table style="width: 100%">
 									<tr><th>Library</th><th>Contents</th></tr>
 									<tr><td class="mono">libvsomeip3-core</td><td>message, endpoints, config, logger, plugin manager, runtime factories</td></tr>
@@ -697,13 +659,12 @@
 								<ul class="fs-xs tight">
 									<li>A new <code>application_factory</code> indirection means <b>no public header changes</b></li>
 									<li><code>examples/sd_only_host</code> opens exactly one UDP socket (checked with <code>strace</code>)</li>
-									<li>CMake output is unchanged (one monolithic library); Bazel gets the split</li>
 								</ul>
 							</div>
 						</div>
-						<div class="takeaway">
+						<div class="takeaway fragment">
 							Follow-up: allow the SD plugin to be created with SD disabled. Today every passive RM
-							needs an idle socket on port 30491 just so the plugin loads.
+							needs an idle SD socket on a spare port just so the plugin loads.
 						</div>
 						<aside class="notes">
 							Full proposal in documentation/standalone-service-discovery.md in the fork. Tested under
@@ -728,7 +689,7 @@
 						<h2>The in-place protect contract</h2>
 						<div class="cols wide-left">
 							<div>
-								<p class="fs-xs"><b>The app has to leave a hole for the E2E header:</b></p>
+								<p class="fs-xs"><b>Today application code has to allocate a bufffer and leave a hole for the E2E header:</b></p>
 								<div class="bufstrip">
 									<div class="seg-hdr">SOME/IP hdr</div>
 									<div class="seg-hole">hole</div>
@@ -748,11 +709,14 @@
 	e2e_provider_-&gt;check(key, its_buffer, inst, status);
 								</code></pre>
 							</div>
-							<ul class="fs-sm tight">
-								<li><b>Layers leak:</b> every client needs to know header sizes and offsets, and a profile change means changing every app.</li>
+							<ul class="fs-sm tight fragment">
+								<li><b>Tight coupling (App <-> E2E profile):</b> every client needs to know header sizes and offsets, and a profile change means changing every app not just config!</li>
 								<li><b>Send:</b> 2 payload copies, one of them a full memmove.</li>
 								<li><b>Receive:</b> 1 copy to check the CRC, then the app strips the header itself.</li>
 							</ul>
+						</div>
+						<div class="takeaway fragment">
+							Fewer copies and fully contain E2E knowledge in the plugin.
 						</div>
 						<aside class="notes">
 							protect(e2e_buffer&amp;) mutates one contiguous owning buffer, and the routing manager has to
@@ -761,7 +725,7 @@
 					</section>
 
 					<section>
-						<p class="kicker">E2E · proposal</p>
+						<p class="kicker">E2E · API Change Proposal</p>
 						<h2>The plugin returns pieces instead of mutating a buffer</h2>
 						<div class="cols">
 							<pre><code class="language-cpp" data-trim data-noescape>
@@ -775,7 +739,7 @@
 	    std::vector&lt;byte_t&gt; owned_app_payload; // Profile 01 only
 	};
 							</code></pre>
-							<div>
+							<div class="fragment">
 								<p class="fs-xs"><b>Routing composes a <code>buffer_sequence</code> without concatenating:</b></p>
 								<div class="flow diagram" style="gap: 0.3em">
 									<div class="blk" style="background: #dbe7f5"><span class="t">SOME/IP hdr</span><span class="s">16 B owned</span></div>
@@ -789,8 +753,8 @@
 								</div>
 							</div>
 						</div>
-						<ul class="fs-sm tight mt">
-							<li>Apps send <b>user data only</b>. The stack inserts the E2E header and fixes the SOME/IP length.</li>
+						<ul class="fs-sm tight mt fragment">
+							<li>Apps send <b>user data only</b>. The <code>E2E Plugin</code> inserts the E2E header and fixes the SOME/IP length.</li>
 							<li>The endpoint queue and nPDU train hold owning <code>buffer_sequence</code>s. Batching calls <code>append_sequence</code> instead of copying bytes.</li>
 						</ul>
 						<aside class="notes">
@@ -809,38 +773,43 @@
 							<div class="seg-app">application payload</div>
 						</div>
 						<div class="views">
-							<div style="flex: 0 0 15%">header fields read in place</div>
-							<div style="flex: 0 0 11%">check_result.e2e_header</div>
-							<div style="flex: 1">check_result.app_payload → payload_impl view handed to the handler</div>
+							<div style="flex: 0 0 14.5%">header fields read in place</div>
+							<div style="flex: 0 0 10%">check_result.e2e_header</div>
+							<div style="flex: 0 0 70%">check_result.app_payload → payload_impl view handed to the handler</div>
 						</div>
-						<pre class="mt"><code class="language-cpp" data-trim data-noescape>
+						<pre class="mt">
+							<code class="language-cpp" data-trim data-noescape>
 	check_result check(buffer_view message, instance_t instance);
-	// status + { e2e_header, app_payload, e2e_footer } as spans into the pin,
-	// filled even on CRC failure so strip can still run
-						</code></pre>
-						<ul class="fs-sm tight">
-							<li><b>Deliver locally:</b> the handler's <code>payload</code> is a view of <code>app_payload</code>. No copy.</li>
-							<li><b>Forward to another local app:</b> a new owned 16-byte header plus a slice of the same buffer.</li>
+
+	struct check_result {
+		profile_interface::check_status_t status{profile_interface::generic_check_status::E2E_ERROR};
+		span<const uint8_t> e2e_header;
+		span<const uint8_t> app_payload;
+		span<const uint8_t> e2e_footer;
+	};</code>
+						</pre>
+						<ul class="fs-sm tight fragment">
+							<li><b>0 Copy:</b> the handler's <code>payload</code> is a view of <code>app_payload</code>.</li>
 							<li>The CRC is computed over the bytes where they already are.</li>
 						</ul>
 					</section>
 
 					<section>
 						<p class="kicker">E2E · proposal</p>
-						<h2>What changes, and what doesn't</h2>
+						<h2>Summary of changes</h2>
 						<div class="cols">
 							<div>
-								<p class="fs-sm"><span class="check">✓</span> <b>Unchanged</b></p>
+								<p class="fs-sm"><b class="green">Unchanged</b></p>
 								<ul class="fs-xs tight">
 									<li>Wire format for standard profiles</li>
 									<li>JSON <code>e2e</code> configuration</li>
 									<li>Public <code>application</code> / <code>message</code> / <code>payload</code> headers</li>
 								</ul>
-								<p class="fs-sm"><span class="x">!</span> <b>Changed</b></p>
+								<p class="fs-sm"><b class="amber">Changed</b></p>
 								<ul class="fs-xs tight">
-									<li>Apps no longer leave holes. Old apps that still do will get <b>two</b> headers on the wire.</li>
-									<li>Handlers receive hole-free data</li>
-									<li>The stock plugin rejects standard AUTOSAR profiles on SOME/IP-SD</li>
+									<li>Apps no longer leave holes. <span class="red">Breaking change:</span> Old apps that still do will get <b>two</b> headers on the wire.</li>
+									<li>Handlers receive hole-free data <span class="red">Breaking change:</span> Old apps need to stop applying offsets before deserializing.</li>
+									<li>OEMs may want to apply SecOCs on SOME/IP-SD messages too. New plugins can support the new functionality but not the stock ones.</li>
 									<li>Open item: SOME/IP-TP still flattens before splitting</li>
 								</ul>
 							</div>
@@ -856,7 +825,7 @@
 								<p class="small">Profile 01 packs CRC and counter in-band, so it still packs once.</p>
 							</div>
 						</div>
-						<div class="takeaway">
+						<div class="takeaway fragment">
 							Discussion point: should the hole-free contract be opt-in behind a config flag during a
 							transition period?
 						</div>
@@ -879,8 +848,8 @@
 
 					<section>
 						<p class="kicker">Ownership</p>
-						<h2>One buffer, many views, recycled when the last reference drops</h2>
-						<div class="diagram" style="font-size: 0.55em">
+						<h2>One <code>shared_ptr</code> + many views, recycled when scope is lost</h2>
+						<div class="diagram fragment" style="font-size: 0.55em">
 							<div class="flow" style="gap: 1em; align-items: center">
 								<div class="lane ok" style="flex: 1.2">
 									<span class="lane-label">shared_ptr&lt;message_buffer_t&gt; · use_count = 3</span>
@@ -893,19 +862,19 @@
 								<div class="arr" style="flex-basis: 2em">⇠</div>
 								<div class="flow vert" style="flex: 1; gap: 0.35em">
 									<div class="blk"><span class="t">handler's shared_ptr&lt;message&gt;</span><span class="s">payload_impl view</span></div>
-									<div class="blk"><span class="t">forward to a local subscriber</span><span class="s">buffer_sequence segment</span></div>
+									<div class="blk"><span class="t">forward to a local subscriber (for UDS)</span><span class="s">buffer_sequence segment</span></div>
 									<div class="blk"><span class="t">debounce / field cache</span><span class="s">same shared_ptr&lt;payload&gt;</span></div>
 								</div>
 								<div class="arr" style="flex-basis: 2em">→</div>
 								<div class="blk accent" style="flex: 0.7">
-									<span class="t">message_buffer_pool</span><span class="s">deleter returns the buffer to the pool when use_count reaches 0</span>
+									<span class="t">use_count reaches 0</span><span class="s">TCP and local: the deleter returns the buffer to message_buffer_pool. UDP: the datagram buffer is freed.</span>
 								</div>
 							</div>
 						</div>
-						<ul class="fs-sm tight mt">
+						<ul class="fs-sm tight mt fragment">
 							<li><b>Ownership is a type:</b> holding a <code>shared_ptr</code> keeps the bytes alive, and a view never outlives its pin.</li>
 							<li><b>No stage copies "to be safe".</b> The lifetime question is answered by the type system.</li>
-							<li><b>Bounded memory:</b> a fixed-depth LIFO pool (default 8). A stalled remote TCP consumer drops frames instead of growing the heap.</li>
+							<li><b>Bounded memory on streams:</b> TCP and local (UDS / local TCP) endpoints receive into a fixed-depth LIFO pool, 8 buffers by default, one pool per connection. When it runs dry, remote TCP drops the frame instead of growing the heap; local IPC allocates, so commands are never lost. UDP passes the datagram's own <code>shared_ptr</code> through, with no pool.</li>
 						</ul>
 					</section>
 
@@ -923,7 +892,7 @@
 	// routing_host
 	void on_message(owned_buffer_slice frame, ...);
 
-	// application: the public API is unchanged
+	// **application: the public API is unchanged**
 	app-&gt;register_message_handler(s, i, m,
 	    [](const std::shared_ptr&lt;message&gt;&amp; msg) {
 	        auto p = msg-&gt;get_payload(); // a view of the pinned frame
@@ -931,11 +900,10 @@
 	    });
 							</code></pre>
 							<ul class="fs-xs tight">
-								<li><b>UDP:</b> the datagram's <code>shared_ptr</code> is passed on as is</li>
-								<li><b>TCP:</b> a full window is moved into a pool lease; otherwise it's copied out once</li>
-								<li><b>Local IPC:</b> the command is sliced in place, with framing tags skipped</li>
-								<li><b>Proxy:</b> the SOME/IP region is pinned; no <code>deserializer::set_data</code></li>
-								<li><b>SD</b> still takes <code>const byte_t*</code>, only for the duration of the call</li>
+								<li class="fragment"><b>UDP:</b> the datagram's <code>shared_ptr</code> is passed on as is</li>
+								<li class="fragment"><b>Streams (TCP and UDS):</b> a frame that fills the window is moved into a pool lease; otherwise it's copied out once. On UDS the slice also skips the IPC framing tags.</li>
+								<li class="fragment"><b>Proxy app, after the UDS hop:</b> the SOME/IP part of the command <i>is</i> the message (pinned, no <code>deserializer::set_data</code>)</li>
+								<li class="fragment"><b>SD</b> still takes <code>const byte_t*</code>, only for the duration of the call</li>
 							</ul>
 						</div>
 					</section>
@@ -943,20 +911,20 @@
 					<section>
 						<p class="kicker">Ownership · send</p>
 						<h2>Send: pin the bytes, or take a deliberate snapshot</h2>
-						<table style="width: 100%; font-size: 0.6em">
+						<pre><code class="language-cpp" data-trim data-noescape>
+	app-&gt;send(std::move(msg));                                      // 0 copy
+	app-&gt;notify(s, i, e, std::move(payload), false);                // 0 copy
+	app-&gt;notify(s, i, e, payload, false, [](bool ok) { recycle(); }); // NEW API: pin + callback (The onus of buffer recyling is on the user)
+	app-&gt;send(msg);                                                 // snapshot once (maybe someone will reuse msg)
+						</code></pre>
+						<table style="width: 100%; font-size: 0.6em" class="fragment">
 							<tr><th>Caller passes…</th><th>The stack…</th><th>Payload copies</th></tr>
 							<tr><td>The only <code>shared_ptr</code> (<code>std::move</code>)</td><td>pins it until the socket write completes</td><td class="n green">0</td></tr>
 							<tr><td>A shared pointer, no completion handler</td><td>takes one snapshot, so later <code>set_data</code> can't change an in-flight write</td><td class="n amber">1</td></tr>
 							<tr><td>A shared pointer <b>with</b> a completion handler</td><td>pins it; the handler says when it's safe to reuse</td><td class="n green">0</td></tr>
 						</table>
-						<pre><code class="language-cpp" data-trim data-noescape>
-	app-&gt;send(std::move(msg));                                      // pin
-	app-&gt;notify(s, i, e, std::move(payload), false);                // pin
-	app-&gt;notify(s, i, e, payload, false, [](bool ok) { recycle(); }); // pin + callback
-	app-&gt;send(msg);                                                 // snapshot once
-						</code></pre>
-						<ul class="fs-xs tight">
-							<li>The completion handler is an optional trailing parameter defaulting to <code>nullptr</code>, so existing code compiles unchanged.</li>
+						<ul class="fs-xs tight fragment" style="margin-top: 2em">
+							<li>Public API is not modified just extended.</li>
 							<li>The internal <code>send(const byte_t*, size)</code> is removed. Routing only accepts owned buffers or <code>buffer_sequence</code>s.</li>
 						</ul>
 					</section>
@@ -965,22 +933,79 @@
 						<p class="kicker">Ownership · results</p>
 						<h2>Before and after</h2>
 						<table style="width: 100%; font-size: 0.6em">
-							<tr><th style="width: 60%">Path (payload-sized userspace copies, E2E on)</th><th>3.6.1</th><th>Fork</th></tr>
-							<tr><td>App is its own RM → wire, payload passed with <code>std::move</code></td><td class="n red">5</td><td class="n green">0</td></tr>
-							<tr><td>Wire → app is its own RM</td><td class="n red">5</td><td class="n green">0</td></tr>
-							<tr><td>Proxy app → RM → wire</td><td class="n red">13</td><td class="n green">0–1</td></tr>
-							<tr><td>Wire → RM → proxy app</td><td class="n red">11</td><td class="n green">0–1</td></tr>
-							<tr><td>SOME/IP-TP reassembly</td><td class="n">1</td><td class="n">1 (to do)</td></tr>
+							<tr>
+								<th rowspan="2" style="width: 44%; vertical-align: bottom">Path (payload-sized copies, E2E on)</th>
+								<th colspan="2" style="text-align: center">3.6.1</th>
+								<th colspan="2" style="text-align: center">Fork</th>
+							</tr>
+							<tr><th class="n">Userspace</th><th class="n">Kernel</th><th class="n">Userspace</th><th class="n">Kernel</th></tr>
+							<tr><td><a href="#/copies-send">App → routing manager → wire</a></td><td class="n red">13</td><td class="n">3</td><td class="n green">0–1*</td><td class="n">3</td></tr>
+							<tr><td><a href="#/copies-receive">Wire → routing manager → app</a></td><td class="n red">11</td><td class="n">3</td><td class="n green">0–1*</td><td class="n">3</td></tr>
+							<tr><td><b>GM:</b> no proxy, SD in a separate broker (each direction)</td><td class="n muted">–</td><td class="n muted">–</td><td class="n green"><b>0</b></td><td class="n green"><b>1</b></td></tr>
+							<tr><td>SOME/IP-TP reassembly</td><td class="n">1</td><td class="n muted">–</td><td class="n">1 (to do)</td><td class="n muted">–</td></tr>
 						</table>
-						<p class="small">
-							"0–1": the receiving side of the UDS hop takes over the receive window when a command fills
-							it, and copies it out once otherwise. Kernel copies don't change: 1 per direction on Ethernet,
-							plus 2 for the UDS hop while apps go through a routing manager.
+						<p class="small" style="margin-top: 2em">
+							*0-1 because technically there is a send api that doesn't <code>std::move</code> the payload, but we don't use that.
 						</p>
 						<aside class="notes">
+							Kernel copies: 2 for the Unix-socket hop to and from the routing manager, plus 1 on the NIC.
+							The fork removes userspace copies, not kernel ones. Taking the app off the proxy path is
+							what removes the Unix-socket hop, and that needs standalone SD. "0–1": the receiving side of
+							the Unix-socket hop takes over the receive window when a command fills it, and copies it
+							out once otherwise.
+
 							Numbers from documentation/receive-copy-elision.md and send-copy-elision.md in the fork.
 							Tests: endpoint_tests covers the pin-vs-snapshot rules; ut_check_strip_pin checks that
 							check_result, payload_impl and the stripped sequence all share one frame buffer.
+						</aside>
+					</section>
+
+					<section id="copies-fork">
+						<p class="kicker">Ownership · results</p>
+						<h2>The same paths in the fork, with no proxy</h2>
+						<div class="diagram">
+							<div class="lane ok fragment">
+								<span class="lane-label">Send: app (its own RM) → wire</span>
+								<div class="flow">
+									<div class="blk"><span class="t">notify()</span><span class="s">std::move(payload): pinned</span><span class="cp zero">0</span></div>
+									<div class="arr">→</div>
+									<div class="blk"><span class="t">E2E protect</span><span class="s">returns header + footer only</span><span class="cp zero">0</span></div>
+									<div class="arr">→</div>
+									<div class="blk"><span class="t">buffer_sequence</span><span class="s">hdr · E2E · pinned payload</span><span class="cp zero">0</span></div>
+									<div class="arr">→</div>
+									<div class="blk"><span class="t">server endpoint</span><span class="s">queues the same pins · writev</span><span class="cp zero">0</span></div>
+									<div class="arr">→</div>
+									<div class="blk wire" style="flex: 0.6"><span class="t">NIC</span><span class="cp kern">K</span></div>
+								</div>
+							</div>
+							<div class="lane ok fragment mt-xs">
+								<span class="lane-label">Receive: wire → app (its own RM)</span>
+								<div class="flow">
+									<div class="blk wire" style="flex: 0.6"><span class="t">NIC</span><span class="cp kern">K</span></div>
+									<div class="arr">→</div>
+									<div class="blk"><span class="t">receive buffer</span><span class="s">UDP datagram or TCP pool lease</span><span class="cp zero">0</span></div>
+									<div class="arr">→</div>
+									<div class="blk"><span class="t">E2E check</span><span class="s">spans into the buffer</span><span class="cp zero">0</span></div>
+									<div class="arr">→</div>
+									<div class="blk"><span class="t">message</span><span class="s">E2E header stripped as a view</span><span class="cp zero">0</span></div>
+									<div class="arr">→</div>
+									<div class="blk"><span class="t">handler</span><span class="s">payload is a view of the frame</span><span class="cp zero">0</span></div>
+								</div>
+							</div>
+						</div>
+						<div class="tiles fragment">
+							<div class="tile green"><span class="big">0</span><span class="lbl">userspace copies each way</span></div>
+							<div class="tile"><span class="big">1</span><span class="lbl">kernel copy each way (the NIC)</span></div>
+							<div class="tile">
+								<span class="lbl" style="font-size: 0.6em">Compare with today's
+								<a href="#/copies-send">send path</a> (13 + 3 kernel) and
+								<a href="#/copies-receive">receive path</a> (11 + 3 kernel)</span>
+							</div>
+						</div>
+						<aside class="notes">
+							Header/footer E2E profiles. Profile 01 keeps CRC and counter in-band, so protect packs the
+							payload once on send. A caller that keeps its own reference to the payload gets one
+							deliberate snapshot instead of a pin.
 						</aside>
 					</section>
 				</section>
@@ -1004,7 +1029,8 @@
 							<div class="tile red"><span class="big">7</span><span class="lbl">recursive mutexes</span></div>
 							<div class="tile amber"><span class="big">30</span><span class="lbl">"deadlock" fixes in CHANGES, across 16 releases</span></div>
 						</div>
-						<ul class="fs-sm tight mt">
+						<ul class="fs-sm tight mt fragment">
+							<li>Multithreading is hard, I get it. And the T-San can only help that much.</li>
 							<li><code>client_endpoint_impl</code> has a <b>strand and four mutexes</b>, one of them recursive</li>
 							<li>Server endpoints have no strand: <code>mutex_</code>, <code>clients_mutex_</code>, and a per-connection <code>socket_mutex_</code></li>
 							<li><code>get_serializer()</code> blocks on a condition variable when the pool is empty. The pool exists because of an earlier deadlock fix ("Use set of serializers to avoid deadlock situation").</li>
@@ -1018,43 +1044,13 @@
 					</section>
 
 					<section>
-						<p class="kicker">Threads · today</p>
-						<h2>A strand and a mutex guarding the same state</h2>
-						<pre style="font-size: 0.56em"><code class="language-cpp" data-trim data-noescape data-line-numbers="|3,5,7,10|15-17">
-	// client_endpoint_impl.cpp: user thread
-	bool client_endpoint_impl::send(const uint8_t* _data, uint32_t _size) {
-	    std::scoped_lock its_lock(mutex_);                   // recursive_mutex
-	    ...
-	    train_-&gt;buffer_-&gt;insert(train_-&gt;buffer_-&gt;end(), _data, _data + _size);
-	    ...
-	    queue_.emplace_back(train_-&gt;buffer_, 0);
-	    if (!is_sending_) {
-	        is_sending_ = true;
-	        boost::asio::dispatch(strand_, [..] { send_queued(entry); });
-	    }
-	}
-	// asio completion handler
-	void client_endpoint_impl::send_cbk(error_code const&amp; _error, size_t _bytes, ...) {
-	    std::scoped_lock its_lock(mutex_);                   // same lock again
-	    queue_size_ -= queue_.front().first-&gt;size();
-	    queue_.pop_front();
-	    ...
-	}
-						</code></pre>
-						<p class="fs-sm">
-							<code>queue_</code>, <code>train_</code> and <code>is_sending_</code> are per-connection state touched from
-							both the user thread and asio's completion handler. <b>That is exactly what a strand is for.</b>
-						</p>
-					</section>
-
-					<section>
 						<p class="kicker">Threads · how strands work</p>
-						<h2>A strand is a queue, not a lock</h2>
-						<div class="diagram" style="font-size: 0.6em">
+						<h2>A strand is a single tasking queue<br/>(so data access in the same strand doesn't need a lock)</h2>
+						<div class="diagram fragment" style="font-size: 0.6em">
 							<div class="threads">
-								<div class="thread"><b>io thread 1</b><div class="mt-xs"><span class="h a">running A·h1</span></div></div>
-								<div class="thread"><b>io thread 2</b><div class="mt-xs"><span class="h b">running B·h1</span></div></div>
-								<div class="thread"><b>io thread 3</b><div class="mt-xs"><span class="h c">running C·h2</span></div></div>
+								<div class="thread"><b>io thread 1</b><div class="mt-xs"><span class="h a">Using SockerA·h1</span></div></div>
+								<div class="thread"><b>io thread 2</b><div class="mt-xs"><span class="h b">Using SocketB·h1</span></div></div>
+								<div class="thread"><b>io thread 3</b><div class="mt-xs"><span class="h c">Using SocketC·h2</span></div></div>
 								<div class="thread"><b>io thread 4</b><div class="mt-xs muted">idle, or running another strand</div></div>
 							</div>
 							<div class="mt">
@@ -1063,7 +1059,7 @@
 								<div class="strand"><span class="name">session C strand</span><span class="h c running">h2</span><span class="muted">(h1 done)</span></div>
 							</div>
 						</div>
-						<ul class="fs-sm tight">
+						<ul class="fs-sm tight fragment">
 							<li>Handlers on <b>one</b> strand never run concurrently, and they run in the order they were posted</li>
 							<li><b>Different</b> strands run in parallel across the whole <code>io_context</code> thread pool</li>
 							<li>No thread ever <b>waits</b>. A busy strand just queues work, so there's nothing to deadlock on</li>
@@ -1071,50 +1067,108 @@
 						</ul>
 					</section>
 
-					<section>
-						<p class="kicker">Threads · proposal</p>
-						<h2>One strand per session; its state is touched only on that strand</h2>
-						<pre><code class="language-cpp" data-trim data-noescape>
-	void session::send(buffer_sequence_ptr seq) {             // any thread
-	    boost::asio::post(strand_,
-	        [self = shared_from_this(), seq = std::move(seq)]() mutable {
-	            self-&gt;queue_.push_back(std::move(seq));       // on strand_: no lock
-	            if (!self-&gt;writing_) self-&gt;write_next();
-	        });
+					<section data-auto-animate>
+						<p class="kicker">Threads · today</p>
+						<h2>A strand and a mutex guarding the same state</h2>
+						<pre data-id="cep-code" style="font-size: 0.46em"><code class="language-cpp" data-trim data-noescape data-line-numbers="|2,7|11,13|16-20">
+	bool client_endpoint_impl::send(const uint8_t* _data, uint32_t _size) {    // user thread
+	    std::scoped_lock its_lock(mutex_);                       // lock 1 (recursive)
+	    train_-&gt;buffer_-&gt;insert(train_-&gt;buffer_-&gt;end(), _data, _data + _size);
+	    queue_.emplace_back(train_-&gt;buffer_, 0);
+	    if (!is_sending_) {
+	        is_sending_ = true;
+	        boost::asio::dispatch(strand_, [..] { send_queued(entry); });   // onto strand_
+	    }
 	}
-
-	void session::write_next() {                              // on strand_
-	    writing_ = true;
-	    boost::asio::async_write(socket_, queue_.front()-&gt;buffers(),
-	        boost::asio::bind_executor(strand_,
-	            [self = shared_from_this()](error_code ec, std::size_t) {
-	                self-&gt;queue_.pop_front();                 // on strand_: no lock
-	                if (ec || self-&gt;queue_.empty()) { self-&gt;writing_ = false; return; }
-	                self-&gt;write_next();
-	            }));
+	void tcp_client_endpoint_impl::send_queued(entry_t&amp; _entry) {             // on strand_
+	    std::scoped_lock its_lock{socket_mutex_};                // lock 2, already on the strand
+	    socket_-&gt;async_write(boost::asio::buffer(*_entry.first), ...,
+	        strand_.wrap([..](auto ec, auto n) { send_cbk(ec, n, buffer); }));
+	}
+	void client_endpoint_impl::send_cbk(error_code const&amp; _error, size_t, ...) {  // on strand_
+	    std::lock_guard its_lock(mutex_);                        // lock 1 again (If we used strand_ with async_write we didn't need it)
+	    queue_size_ -= queue_.front().first-&gt;size();
+	    queue_.pop_front();
+	    if (queue_.empty()) is_sending_ = false;
+	    else send_queued(get_front());
 	}
 						</code></pre>
 						<p class="fs-sm">
-							The queue, the train, the socket, the dispatch timer and the connect state all belong to the
-							session's strand. That removes <code>mutex_</code>, <code>socket_mutex_</code>, and both timer mutexes from each endpoint.
+							Everything after <code>send()</code> already runs on <code>strand_</code>, yet each step still
+							takes a lock. <b>UDP is worse:</b> its completion handler isn't on the strand at all, and
+							<code>send_queued</code> sleeps for the SOME/IP-TP separation time while holding
+							<code>socket_mutex_</code>, blocking an io thread.
 						</p>
+						<aside class="notes">
+							vsomeip 3.6.1, TCP client: client_endpoint_impl.cpp:319 dispatches send_queued onto strand_;
+							tcp_client_endpoint_impl.cpp:327-363 takes socket_mutex_ and wraps the async_write completion
+							with strand_.wrap; client_endpoint_impl.cpp:514 send_cbk takes the recursive mutex_ again and
+							calls send_queued for the next entry. UDP client: udp_client_endpoint_impl.cpp:199-229 holds
+							last_sent_mutex_ and socket_mutex_, calls std::this_thread::sleep_for for the separation time,
+							and binds send_cbk with plain std::bind, so the completion isn't on the strand.
+						</aside>
+					</section>
+
+					<section data-auto-animate>
+						<p class="kicker">Threads · rewrite</p>
+						<h2>The same code on the strand</h2>
+						<pre data-id="cep-code" style="font-size: 0.46em"><code class="language-cpp" data-trim data-noescape data-line-numbers="|2-3|13-14|17-20">
+	bool client_endpoint_impl::send(buffer_sequence_ptr_t _seq) {               // any thread
+	    boost::asio::post(strand_, [this, self = shared_from_this(), seq = std::move(_seq)] {
+	        train_-&gt;sequence_-&gt;append_sequence(*seq);            // on strand_: no lock
+	        queue_.emplace_back(train_-&gt;sequence_, 0);
+	        if (!is_sending_) {
+	            is_sending_ = true;
+	            send_queued(queue_.front());                     // already on strand_
+	        }
+	    });
+	    return true;
+	}
+	void tcp_client_endpoint_impl::send_queued(entry_t&amp; _entry) {             // on strand_
+	    socket_-&gt;async_write(_entry.first-&gt;buffers(), ...,       // no socket_mutex_
+	        boost::asio::bind_executor(strand_, [..](auto ec, auto n) { send_cbk(ec, n, buffer); }));
+	}
+	void client_endpoint_impl::send_cbk(error_code const&amp; _error, size_t, ...) {  // on strand_
+	    queue_size_ -= queue_.front().first-&gt;size();             // no lock
+	    queue_.pop_front();
+	    if (queue_.empty()) is_sending_ = false;
+	    else send_queued(queue_.front());
+	}
+						</code></pre>
+						<p class="fs-sm fragment">
+							Same state, same order. The queue, the train, the socket, the dispatch timer and the connect
+							state all belong to the connection's strand, which removes <code>mutex_</code>,
+							<code>socket_mutex_</code> and both timer mutexes from each endpoint. For UDP the separation
+							time becomes a <code>steady_timer</code> on the strand instead of <code>sleep_for</code>.
+						</p>
+						<aside class="notes">
+							This is the 3.6.1 function rewritten, not code from the fork; the strand work isn't implemented
+							yet. Today send() returns false synchronously when the queue limit is hit. On a strand that
+							decision happens later, so either keep an atomic estimate of queue_size_ for the fast check or
+							report the drop through the send completion handler from the send-copy-elision change.
+						</aside>
 					</section>
 
 					<section>
 						<p class="kicker">Threads · proposal</p>
-						<h2>What still needs care</h2>
-						<table style="width: 100%; font-size: 0.6em">
-							<tr><th>Concern</th><th>Approach</th></tr>
-							<tr><td><code>send()</code> returns <code>bool</code> right away (queue limit)</td><td>Check an atomic byte counter up front, then <code>post</code>. Report failures later through the completion handler.</td></tr>
-							<tr><td>Shared tables: routing info, subscriptions, offers</td><td>Own them on one routing strand, or publish read-mostly tables as immutable snapshots behind an atomic <code>shared_ptr</code></td></tr>
-							<tr><td>User handlers</td><td>Keep dispatching them on dispatcher threads, never on a session strand, so user code can't stall I/O</td></tr>
-							<tr><td>Blocking <code>get_serializer()</code></td><td>Mostly goes away: with copy elision, non-SD sends don't serialize the full frame</td></tr>
-							<tr><td>Migration</td><td>Endpoint by endpoint, TSan-gated. Client endpoints already have the strand, so they're the natural first step.</td></tr>
-						</table>
-						<div class="takeaway">
-							This is the one proposal that isn't implemented in the fork yet. We'd like to agree on the
-							approach with the maintainers first.
+						<h2>Work in progress: stay tuned</h2>
+						<div class="takeaway mt">
+							Strands per connection is proposal that isn't implemented in the fork yet. It touches a lot and we'd like to
+							agree on the approach with the maintainers first.
 						</div>
+						<aside class="notes">
+							Open questions, if asked:
+							send() returns before the bytes are queued: the caller hands over an owned buffer (section 5).
+							send() returns bool for the queue limit: check an atomic byte counter up front, then post;
+							report failures later through the completion handler.
+							Shared tables (routing info, subscriptions, offers): own them on one routing strand, or publish
+							read-mostly tables as immutable snapshots behind an atomic shared_ptr.
+							User handlers: keep them on dispatcher threads, never on a connection strand, so user code
+							can't stall I/O.
+							Blocking get_serializer(): mostly goes away, since non-SD sends no longer serialize the full frame.
+							Migration: endpoint by endpoint, gated on TSan. Client endpoints already have a strand, so
+							they're the natural first step.
+						</aside>
 					</section>
 				</section>
 
