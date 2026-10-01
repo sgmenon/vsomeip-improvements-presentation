@@ -1,0 +1,533 @@
+/* Theme overrides and diagram primitives for "How GM uses vsomeip in its ADAS stack". */
+
+:root {
+	--gm-blue: #0170ce;
+	--gm-navy: #0b2545;
+	--ink: #1d2433;
+	--muted: #5c6b80;
+	--panel: #eef4fb;
+	--panel-edge: #b9cde4;
+
+	--ineff: #d62828; /* code inefficiency: removable without API change */
+	--design: #e89a1c; /* design copy: forced by API / architecture */
+	--kernel: #8d99ae; /* kernel socket copy */
+	--zero: #2a9d8f; /* eliminated / zero-copy */
+
+	--r-main-font: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--r-heading-font: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--r-main-color: var(--ink);
+	--r-heading-color: var(--gm-navy);
+	--r-link-color: var(--gm-blue);
+	--r-heading-text-transform: none;
+	--r-heading-font-weight: 700;
+	--r-main-font-size: 30px;
+	--r-code-font: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+}
+
+.reveal h1 {
+	font-size: 2.1em;
+}
+.reveal h2 {
+	font-size: 1.45em;
+	margin-bottom: 0.5em;
+}
+.reveal h3 {
+	font-size: 1.05em;
+	color: var(--muted);
+}
+.reveal p,
+.reveal li {
+	line-height: 1.35;
+}
+.reveal .slides section {
+	text-align: left;
+}
+.reveal .slides section.center-all {
+	text-align: center;
+}
+.reveal ul {
+	margin-left: 1em;
+}
+.reveal small,
+.reveal .small {
+	font-size: 0.62em;
+	color: var(--muted);
+}
+.reveal .kicker {
+	color: var(--gm-blue);
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	font-size: 0.55em;
+	margin-bottom: 0.2em;
+}
+.reveal .takeaway {
+	margin-top: 0.7em;
+	padding: 0.45em 0.8em;
+	border-left: 6px solid var(--gm-blue);
+	background: var(--panel);
+	font-size: 0.8em;
+}
+.reveal .warn {
+	border-left-color: var(--ineff);
+}
+.reveal pre {
+	width: 100%;
+	font-size: 0.5em;
+	box-shadow: none;
+	border-radius: 6px;
+}
+.reveal pre code {
+	max-height: 560px;
+	padding: 0.7em 0.9em;
+	line-height: 1.35;
+}
+.reveal code {
+	font-family: var(--r-code-font);
+}
+.reveal :not(pre) > code {
+	background: #eef1f5;
+	padding: 0 0.2em;
+	border-radius: 3px;
+	font-size: 0.88em;
+}
+
+/* Section divider slides */
+.reveal section.divider {
+	text-align: left;
+}
+.reveal section.divider h2 {
+	font-size: 2em;
+	color: #fff;
+}
+.reveal section.divider p {
+	color: #cfe3f7;
+}
+.reveal section.divider .num {
+	font-size: 4em;
+	font-weight: 800;
+	color: rgba(255, 255, 255, 0.18);
+	line-height: 1;
+}
+
+/* Two-column layout */
+.cols {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1.2em;
+	align-items: start;
+}
+.cols.wide-left {
+	grid-template-columns: 1.4fr 1fr;
+}
+.cols.wide-right {
+	grid-template-columns: 1fr 1.4fr;
+}
+.cols.three {
+	grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* Tables */
+.reveal table {
+	font-size: 0.6em;
+	border-collapse: collapse;
+	margin: 0.4em 0;
+}
+.reveal table th {
+	background: var(--gm-navy);
+	color: #fff;
+	border: none;
+	padding: 0.35em 0.6em;
+}
+.reveal table td {
+	border-bottom: 1px solid #dde4ee;
+	padding: 0.3em 0.6em;
+}
+.reveal pre table {
+	font-size: inherit;
+	margin: 0;
+}
+.reveal pre table td {
+	border: none;
+	padding: 0 0.4em 0 0;
+}
+.reveal table td.mono {
+	white-space: nowrap;
+}
+.reveal table td.n {
+	text-align: center;
+	font-weight: 700;
+}
+
+/* ---------- Diagram primitives ---------- */
+
+.diagram {
+	font-size: 0.5em;
+	line-height: 1.25;
+	margin: 0.4em 0;
+}
+
+/* A process / host boundary */
+.lane {
+	position: relative;
+	border: 2px dashed var(--panel-edge);
+	background: var(--panel);
+	border-radius: 10px;
+	padding: 1.9em 0.8em 0.8em;
+}
+.lane > .lane-label {
+	position: absolute;
+	top: 0.4em;
+	left: 0.8em;
+	white-space: nowrap;
+	font-weight: 700;
+	color: var(--gm-navy);
+	letter-spacing: 0.02em;
+}
+.lane.solid {
+	border-style: solid;
+}
+.lane.hot {
+	border-color: var(--ineff);
+	background: #fdeeee;
+}
+.lane.ok {
+	border-color: var(--zero);
+	background: #e9f6f4;
+}
+.lane.white {
+	background: #fff;
+}
+
+/* A horizontal flow of blocks */
+.flow {
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+}
+.flow.vert {
+	flex-direction: column;
+}
+.blk {
+	position: relative;
+	flex: 1 1 0;
+	min-width: 0;
+	background: #fff;
+	border: 2px solid #34495e;
+	border-radius: 6px;
+	padding: 0.5em 0.5em 0.6em;
+	text-align: center;
+}
+.blk .t {
+	font-weight: 700;
+	display: block;
+}
+.blk .s {
+	display: block;
+	color: var(--muted);
+	font-family: var(--r-code-font);
+	font-size: 0.85em;
+	margin-top: 0.2em;
+	word-break: break-word;
+}
+.blk.ghost {
+	border-style: dashed;
+	color: var(--muted);
+}
+.blk.accent {
+	border-color: var(--gm-blue);
+	background: #e7f1fb;
+}
+.blk.wire {
+	background: #34495e;
+	color: #fff;
+	border-color: #34495e;
+}
+.blk.wire .s {
+	color: #d4dde8;
+}
+
+.arr {
+	flex: 0 0 1.6em;
+	align-self: center;
+	text-align: center;
+	color: #34495e;
+	font-size: 1.4em;
+	font-weight: 700;
+}
+.arr.down {
+	flex-basis: auto;
+	padding: 0.1em 0;
+}
+.arr.hop {
+	color: var(--ineff);
+}
+
+/* Copy badges */
+.cp {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1.7em;
+	height: 1.7em;
+	padding: 0 0.3em;
+	border-radius: 999px;
+	color: #fff;
+	font-weight: 800;
+	font-size: 0.95em;
+	margin: 0.25em 0.1em 0;
+	box-sizing: border-box;
+}
+.cp.ineff {
+	background: var(--ineff);
+}
+.cp.design {
+	background: var(--design);
+}
+.cp.kern {
+	background: var(--kernel);
+}
+.cp.zero {
+	background: var(--zero);
+}
+.cp.struck {
+	background: #c9d1dc;
+	color: #fff;
+	text-decoration: line-through;
+}
+
+/* Legend row */
+.legend {
+	display: flex;
+	gap: 1.4em;
+	font-size: 0.48em;
+	color: var(--muted);
+	margin-top: 0.4em;
+	align-items: center;
+	flex-wrap: wrap;
+}
+.legend .cp {
+	margin: 0 0.35em 0 0;
+	font-size: 0.9em;
+}
+
+/* Score tiles */
+.tiles {
+	display: flex;
+	gap: 0.6em;
+	margin: 0.4em 0;
+}
+.tile {
+	flex: 1;
+	background: #fff;
+	border: 2px solid #dde4ee;
+	border-radius: 10px;
+	padding: 0.5em 0.6em;
+	text-align: center;
+}
+.tile .big {
+	font-size: 1.9em;
+	font-weight: 800;
+	color: var(--gm-navy);
+	line-height: 1.05;
+	display: block;
+}
+.tile .lbl {
+	font-size: 0.5em;
+	color: var(--muted);
+	display: block;
+	margin-top: 0.2em;
+}
+.tile.red .big {
+	color: var(--ineff);
+}
+.tile.green .big {
+	color: var(--zero);
+}
+.tile.amber .big {
+	color: var(--design);
+}
+
+/* Stacked transport bar */
+.stackbar {
+	display: flex;
+	height: 2.2em;
+	border-radius: 8px;
+	overflow: hidden;
+	font-size: 0.62em;
+	font-weight: 700;
+	color: #fff;
+	margin: 0.3em 0 0.2em;
+}
+.stackbar > div {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.seg-shm {
+	background: var(--gm-blue);
+}
+.seg-pcie {
+	background: #6a4c93;
+}
+.seg-eth {
+	background: #34495e;
+}
+
+/* Buffer strip (one contiguous buffer with views) */
+.bufstrip {
+	display: flex;
+	height: 2.4em;
+	border: 2px solid var(--gm-navy);
+	border-radius: 4px;
+	overflow: hidden;
+	font-size: 0.55em;
+	font-family: var(--r-code-font);
+}
+.bufstrip > div {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-right: 2px solid var(--gm-navy);
+	color: var(--gm-navy);
+}
+.bufstrip > div:last-child {
+	border-right: none;
+}
+.seg-hdr {
+	flex: 0 0 15%;
+	white-space: nowrap;
+	background: #dbe7f5;
+}
+.seg-e2e {
+	flex: 0 0 11%;
+	background: #fde7c3;
+}
+.seg-app {
+	flex: 1;
+	background: #d9f0ec;
+}
+.seg-foot {
+	flex: 0 0 6%;
+	background: #fde7c3;
+}
+.seg-hole {
+	flex: 0 0 11%;
+	background: repeating-linear-gradient(45deg, #fff, #fff 6px, #f3c1c1 6px, #f3c1c1 12px);
+}
+
+/* View brackets under a buffer strip */
+.views {
+	display: flex;
+	font-size: 0.45em;
+	color: var(--muted);
+	margin-top: 0.2em;
+}
+.views > div {
+	border-top: 3px solid var(--zero);
+	margin: 0 2px;
+	padding-top: 0.2em;
+	text-align: center;
+	font-family: var(--r-code-font);
+}
+
+/* Strand queues */
+.strand {
+	display: flex;
+	align-items: center;
+	gap: 0.3em;
+	margin: 0.25em 0;
+}
+.strand .name {
+	flex: 0 0 8.5em;
+	font-weight: 700;
+	color: var(--gm-navy);
+}
+.h {
+	display: inline-block;
+	flex: 0 0 auto;
+	padding: 0.2em 0.5em;
+	border-radius: 4px;
+	font-family: var(--r-code-font);
+	color: #fff;
+}
+.h.a {
+	background: var(--gm-blue);
+}
+.h.b {
+	background: #6a4c93;
+}
+.h.c {
+	background: var(--zero);
+}
+.h.running {
+	outline: 3px solid var(--ink);
+}
+
+.threads {
+	display: flex;
+	gap: 0.5em;
+}
+.thread {
+	flex: 1;
+	border: 2px solid #34495e;
+	border-radius: 6px;
+	padding: 0.35em;
+	text-align: center;
+	background: #fff;
+}
+
+/* Small helpers */
+.muted {
+	color: var(--muted);
+}
+.red {
+	color: var(--ineff);
+}
+.green {
+	color: var(--zero);
+}
+.amber {
+	color: var(--design);
+}
+.blue {
+	color: var(--gm-blue);
+}
+.mono {
+	font-family: var(--r-code-font);
+}
+.tight li {
+	margin: 0.15em 0;
+}
+.fs-sm {
+	font-size: 0.75em;
+}
+.fs-xs {
+	font-size: 0.6em;
+}
+.mt {
+	margin-top: 0.6em;
+}
+.mt-xs {
+	margin-top: 0.35em;
+}
+.x {
+	color: var(--ineff);
+	font-weight: 800;
+}
+.check {
+	color: var(--zero);
+	font-weight: 800;
+}
+
+/* Footer source line */
+.src {
+	position: absolute;
+	bottom: -1.2em;
+	left: 0;
+	font-size: 0.4em;
+	color: var(--muted);
+	font-family: var(--r-code-font);
+}
