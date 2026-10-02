@@ -1151,10 +1151,112 @@
 					</section>
 
 					<section>
+						<p class="kicker">Threads · dispatchers today</p>
+						<h2>Dispatcher threads: spawned on demand, hard to destroy</h2>
+						<div class="diagram" style="font-size: 0.5em">
+							<div class="flow">
+								<div class="blk"><span class="t">handler runs</span><span class="s">longer than max_dispatch_time (100 ms)</span></div>
+								<div class="arr">→</div>
+								<div class="blk"><span class="t">timer fires</span><span class="s">no idle dispatcher left</span></div>
+								<div class="arr hop">→</div>
+								<div class="blk"><span class="t">new std::thread</span><span class="s">up to max_dispatchers (10)</span></div>
+							</div>
+						</div>
+						<ul class="fs-sm tight mt">
+							<li class="fragment">Threads get created <b>at any time after <code>init()</code></b>, whenever some handler is slow</li>
+							<li class="fragment"><code>stop()</code> called from a handler can't join its own thread: 3.6.1 <b>detaches</b> it, 3.7.x hands it to a <code>thread_manager</code> singleton</li>
+							<li class="fragment">If that singleton is already gone at teardown: <code>detach()</code> and <code>will cause leaks!</code></li>
+							<li class="fragment">Each dispatcher holds <code>shared_from_this()</code>, so the application outlives whoever owns it</li>
+						</ul>
+						<div class="takeaway fragment">
+							Threads spawned at random points after initialization are a safety hazard, and there's no
+							deterministic order of destruction.
+						</div>
+						<aside class="notes">
+							vsomeip 3.6.1 application_impl.cpp:1922-1970 invoke_handler arms a steady_timer for
+							max_dispatch_time_; on expiry with no idle dispatcher it creates a std::thread running dispatch(),
+							up to max_dispatchers_ (configured value + 1). Defaults: internal.hpp.in VSOMEIP_DEFAULT_MAX_DISPATCH_TIME
+							100, VSOMEIP_DEFAULT_MAX_DISPATCHERS 10. shutdown() at :2117-2140 joins dispatchers but detaches the one
+							that called stop(); ~application_impl at :95-111 detaches remaining io threads and dispatchers.
+							Upstream 3.7.6 application_impl.cpp:455-481 passes the stop() caller's thread to thread_manager and
+							falls back to detach with "Detaching dispatcher thread (WILL CAUSE LEAKS!)". Commit 7773c31 removed
+							the try_lock/yield busy-wait loops in the same code. The pattern comes from CommonAPI apps calling
+							stop() from inside a callback.
+						</aside>
+					</section>
+
+					<section>
+						<p class="kicker">Threads · dispatchers proposal</p>
+						<h2>Handlers on a strand in the io pool</h2>
+						<ul class="fs-sm tight">
+							<li class="fragment"><b>No extra threads:</b> handlers run on the existing asio io pool, on the application's strand, in the same order as today</li>
+							<li class="fragment"><b>Long-running handlers</b> are a bad idea, but if you must: raise <code>threads</code> in the application config</li>
+							<li class="fragment"><b>Handlers waiting on each other:</b> opt in through new <code>yield_context</code> overloads and run as stackful coroutines (a coroutine stack, not a thread; no C++20 needed). A wait yields the strand instead of blocking a thread, so the other handler gets to run.
+								<ul>
+									<li>(I like coroutines for the readability, and they complement strands beautifully.)</li>
+								</ul>
+							</li>
+							<li class="fragment"><code>max_dispatch_time</code> becomes a <b>watchdog</b>:
+								<ul>
+									<li>an overrun is reported,</li>
+									<li>the greedy handler is flagged; well-behaved ones yield,</li>
+									<li>no mutexes or semaphores are involved</li>
+									<li>nothing is cancelled and no new thread is spawned on-the-fly</li>
+								</ul>
+							</li>
+							<li class="fragment"><code>stop()</code> stops the <code>io_context</code> and joins the pool. Called from a handler, it just posts the stop, so nothing joins itself and nothing is detached.</li>
+						</ul>
+						<aside class="notes">
+							Blocking inside a handler should really happen in the user's own threads; the coroutine only makes
+							waiting on another handler safe. A watchdog can't preempt a handler that never yields; it reports it.
+						</aside>
+					</section>
+
+					<section>
+						<p class="kicker">Threads · dispatchers sketch</p>
+						<h2>Plain callbacks inline, coroutines only on opt-in</h2>
+						<pre style="font-size: 0.46em"><code class="language-cpp" data-trim data-noescape data-line-numbers="|2-6|7-14">
+	void application_impl::drain() {                                           // on handler_strand_
+	    while (auto its_handler = get_next_handler()) {                        // today's handlers_ queue
+	        if (!its_handler-&gt;yields_) {
+	            run_guarded(its_handler);                                      // plain callback: inline, as today
+	            continue;
+	        }
+	        boost::asio::spawn(handler_strand_,                                // only yield-aware handlers
+	            [weak = weak_from_this(), its_handler, gen = generation_](boost::asio::yield_context _yield) {
+	                auto self = weak.lock();
+	                if (!self || gen != self-&gt;generation_) return;             // cleared or stopped while queued
+	                self-&gt;run_guarded(its_handler, _yield);                    // try/catch, watchdog paused on yield
+	            },
+	            boost::asio::detached);
+	    }
+	}
+						</code></pre>
+						<p class="fs-sm fragment">
+							Existing users pay nothing: no coroutine stack, no Boost.Context, and <code>clear_all_handler()</code>
+							still drops pending handlers. Coroutine users get yielding on the same strand.
+						</p>
+						<aside class="notes">
+							This is a sketch, not code from the fork. run_guarded keeps today's try/catch and print_blocking_call;
+							with a yield_context it wraps the context so the watchdog is cancelled on each yield and re-armed on
+							each resume, so a handler waiting for a reply isn't reported as blocking. Exceptions are caught there
+							because boost::asio::detached reports nothing. The coroutine captures a weak_ptr and checks a
+							generation counter on entry, because a spawned coroutine can't be removed from the strand once queued;
+							clear_all_handler() and stop() bump the generation. Costs of the coroutine path, paid only by handlers
+							that opt in: a stack per spawn (128 KB by default with Boost.Context, so use a pooled stack allocator for
+							high-rate events), a context switch, and Boost.Context as a new Bazel/CMake dependency whose assembly
+							has to cover the target platforms (QNX, ARM). Once handlers yield, two handlers for the same service can
+							interleave; that's inherent to cooperative scheduling, and it's the ordering the old availability
+							bookkeeping existed to prevent, so it has to be documented. stop() bumps the generation, stops the io_context and joins the pool; called
+							from a handler it just posts the stop, so nothing joins itself and nothing is detached.
+						</aside>
+					</section>
+
+					<section>
 						<p class="kicker">Threads · proposal</p>
 						<h2>Work in progress: stay tuned</h2>
 						<div class="takeaway mt">
-							Strands per connection is proposal that isn't implemented in the fork yet. It touches a lot and we'd like to
+							Strands per connection and for handlers are a proposal that isn't implemented in the fork yet. It touches a lot and we'd like to
 							agree on the approach with the maintainers first.
 						</div>
 						<aside class="notes">
@@ -1164,8 +1266,8 @@
 							report failures later through the completion handler.
 							Shared tables (routing info, subscriptions, offers): own them on one routing strand, or publish
 							read-mostly tables as immutable snapshots behind an atomic shared_ptr.
-							User handlers: keep them on dispatcher threads, never on a connection strand, so user code
-							can't stall I/O.
+							User handlers: coroutines on an application strand in the io pool, never on a connection strand.
+							A handler that blocks takes one io thread; size the pool with the application's "threads" setting.
 							Blocking get_serializer(): mostly goes away, since non-SD sends no longer serialize the full frame.
 							Migration: endpoint by endpoint, gated on TSan. Client endpoints already have a strand, so
 							they're the natural first step.
@@ -1185,7 +1287,7 @@
 						<tr><td class="n">2</td><td><b>E2E scatter-gather</b> (<code>protect_result</code>, <code>check_result</code>, <code>buffer_sequence</code>)</td><td>E2E plugin API; apps stop leaving holes</td><td class="green">Implemented · Docker E2E suites in CI</td></tr>
 						<tr><td class="n">3</td><td><b>Receive copy elision</b> (<code>owned_buffer_slice</code>, pooled buffers)</td><td>None: handlers still get <code>shared_ptr&lt;message&gt;</code></td><td class="green">Implemented · unit tests</td></tr>
 						<tr><td class="n">4</td><td><b>Send copy elision</b> (pin or snapshot, completion handler)</td><td>Optional trailing parameter</td><td class="green">Implemented · unit tests</td></tr>
-						<tr><td class="n">5</td><td><b>Strand per session</b></td><td>None</td><td class="amber">In Progress</td></tr>
+						<tr><td class="n">5</td><td><b>Strand per session</b>, and handler strands instead of dispatcher threads</td><td>None</td><td class="amber">In Progress</td></tr>
 						<tr><td class="n">6</td><td><b>Zero-copy serialization library</b> generated from <b>IFEX</b> interface specifications</td><td>Additive: a new, optional library</td><td class="amber">Pending internal authorization</td></tr>
 					</table>
 					<ul class="fs-sm tight mt">
