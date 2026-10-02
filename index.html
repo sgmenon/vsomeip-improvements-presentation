@@ -111,13 +111,10 @@
 						<h2>Subspace on the HPC side, SOME/IP only to MCUs</h2>
 						<div class="stackbar">
 							<div class="seg-shm" style="flex: 70">Mostly Subspace over shared memory (same SoC)</div>
-							<div class="seg-pcie" style="flex: 10">PCIe where possible</div>
-							<div class="seg-eth" style="flex: 20" title="SOME/IP over Ethernet"></div>
+							<div class="seg-pcie" style="flex: 10">PCIe</div>
+							<div class="seg-eth" style="flex: 20" title="SOME/IP over Ethernet">SOME/IP</div>
 						</div>
-						<div class="legend" style="margin-bottom: 0.6em">
-							<span>Share of ADAS messages by transport (approximate). The PCIe share is Subspace too, through a tunnel. The dark sliver at the end is ~2% SOME/IP over Ethernet to MCUs.</span>
-						</div>
-						<div class="diagram">
+						<div class="diagram" style="margin-top: 2em">
 							<div class="flow">
 								<div class="lane" style="flex: 1">
 									<span class="lane-label">SoC A</span>
@@ -128,7 +125,7 @@
 									</div>
 								</div>
 								<div class="arr" style="flex-basis: 4.6em; font-size: 1em; color: #6a4c93">
-									⇄<br /><b>PCIe</b><br />Subspace tunnel
+									<span style="font-size: 2em">⇄</span><br /><b>PCIe</b><br />Subspace tunnel
 								</div>
 								<div class="lane" style="flex: 1">
 									<span class="lane-label">SoC B</span>
@@ -152,7 +149,7 @@
 								</div>
 							</div>
 						</div>
-						<div class="takeaway">
+						<div class="takeaway fragment" style="margin-top: 2em">
 							For ADAS developers, SOME/IP is a <b>low-level routing detail</b>. The SOME/IP bridge is where
 							vsomeip lives, and it must not become the bottleneck.
 						</div>
@@ -243,8 +240,8 @@
 									<div class="blk wire" style="flex: 0.7"><span class="t">Unix socket</span><span class="s">write</span><span class="cp kern fragment" data-fragment-index="5">K</span></div>
 								</div>
 							</div>
-							<div class="arr down">↓</div>
-							<div class="lane">
+							<div class="arr wrap"><i></i></div>
+							<div class="lane" style="margin-top: 1em">
 								<span class="lane-label">Routing manager (routing_manager_stub → routing_manager_impl)</span>
 								<div class="flow">
 									<div class="blk wire" style="flex: 0.7"><span class="t">Unix socket</span><span class="s">read</span><span class="cp kern fragment" data-fragment-index="5">K</span></div>
@@ -328,6 +325,9 @@
 							<div class="tile red"><span class="big">4</span><span class="lbl">coding copies</span></div>
 							<div class="tile amber"><span class="big">7</span><span class="lbl">design copies (one of them in the app)</span></div>
 							<div class="tile"><span class="big">3</span><span class="lbl">kernel copies</span></div>
+						</div>
+						<div class="fragment small" style="margin-top: 2em">
+							Spoiler: Jump to a <a href="#/copies-fork">later slide</a> to see the final shape.
 						</div>
 						<aside class="notes">
 							vsomeip 3.6.1 references:
@@ -837,7 +837,7 @@
 				</section>
 
 				<!-- ============================================================ -->
-				<!-- 5. Ownership API                                              -->
+				<!-- 5. Views not copies                                           -->
 				<!-- ============================================================ -->
 				<section>
 					<section data-background-color="#0b2545" class="divider">
@@ -847,7 +847,7 @@
 					</section>
 
 					<section>
-						<p class="kicker">Ownership</p>
+						<p class="kicker">Use Views</p>
 						<h2>One <code>shared_ptr</code> + many views, recycled when scope is lost</h2>
 						<div class="diagram fragment" style="font-size: 0.55em">
 							<div class="flow" style="gap: 1em; align-items: center">
@@ -879,7 +879,7 @@
 					</section>
 
 					<section>
-						<p class="kicker">Ownership · receive</p>
+						<p class="kicker">Use Views · receive</p>
 						<h2>Receive: the socket buffer is the message</h2>
 						<div class="cols wide-left">
 							<pre><code class="language-cpp" data-trim data-noescape>
@@ -909,7 +909,7 @@
 					</section>
 
 					<section>
-						<p class="kicker">Ownership · send</p>
+						<p class="kicker">Use Views · send</p>
 						<h2>Send: pin the bytes, or take a deliberate snapshot</h2>
 						<pre><code class="language-cpp" data-trim data-noescape>
 	app-&gt;send(std::move(msg));                                      // 0 copy
@@ -930,7 +930,7 @@
 					</section>
 
 					<section>
-						<p class="kicker">Ownership · results</p>
+						<p class="kicker">Use Views · results</p>
 						<h2>Before and after</h2>
 						<table style="width: 100%; font-size: 0.6em">
 							<tr>
@@ -961,10 +961,10 @@
 					</section>
 
 					<section id="copies-fork">
-						<p class="kicker">Ownership · results</p>
+						<p class="kicker">Use Views · results</p>
 						<h2>The same paths in the fork, with no proxy</h2>
 						<div class="diagram">
-							<div class="lane ok fragment">
+							<div class="lane ok">
 								<span class="lane-label">Send: app (its own RM) → wire</span>
 								<div class="flow">
 									<div class="blk"><span class="t">notify()</span><span class="s">std::move(payload): pinned</span><span class="cp zero">0</span></div>
@@ -978,7 +978,8 @@
 									<div class="blk wire" style="flex: 0.6"><span class="t">NIC</span><span class="cp kern">K</span></div>
 								</div>
 							</div>
-							<div class="lane ok fragment mt-xs">
+							<div class="arr wrap"><i></i></div>
+							<div class="lane ok mt-xs">
 								<span class="lane-label">Receive: wire → app (its own RM)</span>
 								<div class="flow">
 									<div class="blk wire" style="flex: 0.6"><span class="t">NIC</span><span class="cp kern">K</span></div>
@@ -1030,10 +1031,10 @@
 							<div class="tile amber"><span class="big">30</span><span class="lbl">"deadlock" fixes in CHANGES, across 16 releases</span></div>
 						</div>
 						<ul class="fs-sm tight mt fragment">
-							<li>Multithreading is hard, I get it. And the T-San can only help that much.</li>
-							<li><code>client_endpoint_impl</code> has a <b>strand and four mutexes</b>, one of them recursive</li>
+							<li>Multithreading is hard. And the T-San can only help that much.</li>
+							<li>There are some use of strands but not effective. Eg. <code>client_endpoint_impl</code> has a <b>strand and four mutexes</b>, one of them recursive</li>
 							<li>Server endpoints have no strand: <code>mutex_</code>, <code>clients_mutex_</code>, and a per-connection <code>socket_mutex_</code></li>
-							<li><code>get_serializer()</code> blocks on a condition variable when the pool is empty. The pool exists because of an earlier deadlock fix ("Use set of serializers to avoid deadlock situation").</li>
+							<li>Strands solve some problems very easily. Eg. <code>get_serializer()</code> blocks on a condition variable when the pool is empty (the pool may not even need to exist).</li>
 						</ul>
 						<aside class="notes">
 							Counts are for vsomeip 3.6.1 implementation/ (rg over *.hpp for mutex members and *.cpp for

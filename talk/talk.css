@@ -263,6 +263,43 @@
 	color: var(--ineff);
 }
 
+/* Elbow connector: down from the last block of one lane, across, into the first block of the next */
+.arr.wrap {
+	--from: 7%;
+	--to: 6.5%;
+	position: relative;
+	height: 2.4em;
+	font-size: 1em;
+}
+.arr.wrap::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	right: var(--from);
+	left: var(--to);
+	height: 50%;
+	box-sizing: border-box;
+	border: 3px solid currentColor;
+	border-top: none;
+	border-left: none;
+}
+.arr.wrap::after {
+	content: '';
+	position: absolute;
+	left: var(--to);
+	top: calc(50% - 3px);
+	bottom: 8px;
+	border-left: 3px solid currentColor;
+}
+.arr.wrap > i {
+	position: absolute;
+	left: calc(var(--to) - 6px);
+	bottom: 0;
+	border: 7.5px solid transparent;
+	border-bottom: none;
+	border-top: 9px solid currentColor;
+}
+
 /* Copy badges */
 .cp {
 	display: inline-flex;
