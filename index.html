@@ -1009,13 +1009,76 @@
 							deliberate snapshot instead of a pin.
 						</aside>
 					</section>
+
+					<section id="bench-vsomeip">
+						<p class="kicker">Use Views · benchmark</p>
+						<h2>Measured: 3.6.1 vs the fork, one-way frame latency</h2>
+						<div style="height: 330px"><canvas data-chart="chart-vsomeip"></canvas></div>
+						<div class="cols three fs-xs mt-xs bench-notes">
+							<div class="fragment"><b>TCP, one notify per frame:</b> the fork is 52–64% faster from 64 KiB up. TCP makes sense for large single messages.</div>
+							<div class="fragment"><b>UDP, what lidar uses (1.4 KB datagrams):</b> half the latency for a single datagram, 10–17% faster from 1 MiB up, but still 38 ms for a 1 MiB frame: ~50 µs per datagram.</div>
+							<div class="fragment"><b>Wait - did I suppress Debounce / PDU retention?</b> It didn't make sense for the use case simulated in our benchmark.</div>
+						</div>
+						<aside class="notes">
+							Two containers on a Docker bridge, E2E P04 on every notify, paced publish (100 Hz small, 1 Hz at 10 MiB),
+							n = 50 to 200 frames after 50 warm-up frames. Latency runs from just before the first notify to the last
+							chunk reaching the subscriber's handler. 3.6.1 runs routingmanagerd plus the app on each side; the fork
+							runs the app as its own routing manager, so the 3.6.1 numbers include the local proxy hop. UDP splits
+							the frame in user space into about 1.4 KB notifies (no SOME/IP-TP); TCP sends the whole frame in one
+							notify. Both runs use harness commit 1bbfdad with npdu-default-timings (debounce and maximum retention,
+							request and response) all set to 0. With the defaults (2 ms debounce, 5 ms retention) every size had a
+							~5 ms floor, because a frame's last train waits for its departure time; that's tuning, not a threading cost.
+							Per datagram: 1 MiB is 756 chunks and 10 MiB about 7,550, so 38 ms and 396 ms are about 50 µs each on
+							the fork, and 58 µs on 3.6.1 at 10 MiB. A single datagram end to end takes about 0.3 ms, so the large-frame
+							cost is the per-message path, not the wire. CPU use wasn't measured in this run.
+						</aside>
+					</section>
+
+					<section id="bench-middleware">
+						<p class="kicker">Use Views · benchmark</p>
+						<h2>Other middleware over a Docker bridge</h2>
+						<div style="height: 330px"><canvas data-chart="chart-middleware"></canvas></div>
+						<div class="cols three fs-xs mt-xs bench-notes">
+							<div class="fragment"><b>At 1 MiB:</b> Subspace 0.44 ms, Zenoh 0.71 ms, Cyclone 3.2 ms. The fork: 6.5 ms on TCP, 38 ms on UDP.</div>
+							<div class="fragment"><b>Comparable protocols:</b> each also does discovery, reliable delivery and fragmentation. The gap is in the implementation.</div>
+						</div>
+						<aside class="notes">
+							Same middleware-comparison repo, notes/benchmarks.md "Network (Docker)": two containers on a bridge,
+							opt builds, 500 round trips, shared memory off. Subspace: two servers bridged over TCP. Zenoh: peers over
+							TCP. Cyclone: reliable RTPS over UDP, which is its default. Payloads are FlatBuffers for Subspace and
+							Zenoh and CDR for Cyclone. With debounce and retention off, the fork at 1 MiB over TCP is 6.5 ms:
+							about 15 times Subspace, 9 times Zenoh and twice Cyclone. At 64 B it's 0.35 ms one-way against
+							0.03-0.08 ms RTT/2.
+						</aside>
+					</section>
+
+					<section id="bench-gains">
+						<p class="kicker">Use Views · benchmark</p>
+						<h2>TCP gains grow with size, UDP gains shrink</h2>
+						<div style="height: 300px"><canvas data-chart="chart-gains"></canvas></div>
+						<div class="cols three fs-xs mt-xs bench-notes">
+							<div class="fragment"><b>Latency, not CPU:</b> TCP sends a frame as one message, so every copy removed is on the critical path. UDP pipelines ~750 datagrams per MiB, so copies overlap. Pipelining hides their latency, but not their CPU cost.</div>
+							<div class="fragment"><b>TCP: ~60% from 1 MiB up.</b> Fewer copies matter more as copy cost dominates, so the gain grows with size and levels off at the share of copy work removed.</div>
+							<div class="fragment"><b>UDP: shrinks as datagrams add up.</b> ~50 µs per datagram against ~0.3 µs to copy 1.4 KB. Why is each PDU so expensive? <a href="#/threads">Next: threads →</a></div>
+						</div>
+						<aside class="notes">
+							Reduction = 1 - fork / 3.6.1 mean latency, from the same no-debounce runs as the previous chart.
+							TCP: 42% at 64 B, 14% at 1 KiB, then 34, 52, 58, 64, 64 and 60% from 16 KiB to 10 MiB. UDP: 54% at 64 B,
+							51% at 1 KiB, 29% at 16 KiB, 10% at 64 KiB, 0.5% at 256 KiB, then 14, 17 and 9% from 1 to 10 MiB.
+							The CPU point is an expectation: CPU use wasn't measured. With one message per frame, copy time adds
+							directly to latency, so latency and CPU savings should track. With ~750 datagrams per MiB in flight, a
+							datagram's copies overlap with other datagrams' sends and receives, so latency is set by the per-datagram
+							cost, while the CPU spent copying is the same as if nothing overlapped. The 0.3 µs is a 1.4 KB copy at the
+							5 GB/s used on the cost slide. The x axis is log here because this chart is about ratios, not scaling.
+						</aside>
+					</section>
 				</section>
 
 				<!-- ============================================================ -->
 				<!-- 6. Threads                                                    -->
 				<!-- ============================================================ -->
 				<section>
-					<section data-background-color="#0b2545" class="divider">
+					<section id="threads" data-background-color="#0b2545" class="divider">
 						<div class="num">06</div>
 						<h2>Threads: strands, not mutexes</h2>
 						<p>Using asio the way it was designed</p>
@@ -1328,5 +1391,8 @@
 				plugins: [RevealHighlight, RevealNotes],
 			});
 		</script>
+		<script src="talk/vendor/chart.umd.min.js"></script>
+		<script src="talk/vendor/chartjs-plugin-zoom.min.js"></script>
+		<script src="talk/bench.js"></script>
 	</body>
 </html>

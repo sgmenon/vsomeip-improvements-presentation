@@ -569,6 +569,15 @@
 	font-family: var(--r-code-font);
 }
 
+/* Callouts under a benchmark chart */
+.bench-notes > div {
+	background: var(--panel);
+	border-left: 4px solid var(--panel-edge);
+	border-radius: 6px;
+	padding: 0.5em 0.7em;
+	line-height: 1.3;
+}
+
 /* In the PDF every fragment is shown, so drop the ones that fade out */
 html.reveal-print .reveal .fragment.fade-out {
 	display: none;
