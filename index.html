@@ -21,18 +21,12 @@
 				<!-- ============================================================ -->
 				<!-- Title                                                         -->
 				<!-- ============================================================ -->
-				<section data-background-color="#0b2545" class="divider">
-					<p class="kicker" style="color: #7fb8ec">COVESA AMA</p>
-					<h1 style="color: #fff">How GM uses vsomeip<br />in its ADAS stack</h1>
-					<p style="color: #cfe3f7; font-size: 0.8em">
-						Copies, discovery, ownership and threads: proposals for upstream
-					</p>
-					<p style="color: #7fb8ec; font-size: 0.6em; margin-top: 2em">
-						Siddharth Menon · Principal Engineer, General Motors
-					</p>
-					<p style="color: #7fb8ec; font-size: 0.6em; margin-top: 2em">
-						<a href="https://github.com/sgmenon/vsomeip" style="color: #7fb8ec">Fork: github.com/sgmenon/vsomeip</a>
-					</p>
+				<section class="title-slide">
+					<p class="kicker">COVESA AMA</p>
+					<h1>How GM uses vsomeip<br />in its ADAS stack</h1>
+					<p class="sub">Copies, discovery, ownership and threads: proposals for upstream</p>
+					<p class="by">Siddharth Menon · Principal Engineer, General Motors</p>
+					<p class="by"><a href="https://github.com/sgmenon/vsomeip">Fork: github.com/sgmenon/vsomeip</a></p>
 					<aside class="notes">
 						Goal of the talk: start a conversation with the vsomeip maintainers. Everything shown is
 						implemented and tested in the fork, but these are substantial changes, so we want to
@@ -61,7 +55,7 @@
 				<!-- 1. ADAS Use Case                                                   -->
 				<!-- ============================================================ -->
 				<section>
-					<section data-background-color="#0b2545" class="divider">
+					<section class="divider">
 						<div class="num">01</div>
 						<h2>The ADAS Use Case</h2>
 						<p>Where SOME/IP sits in GM's ADAS compute</p>
@@ -124,7 +118,7 @@
 										<div class="blk accent"><span class="t">Subspace</span><span class="s">shm + tunnels</span></div>
 									</div>
 								</div>
-								<div class="arr" style="flex-basis: 4.6em; font-size: 1em; color: #6a4c93">
+								<div class="arr" style="flex-basis: 4.6em; font-size: 1em; color: var(--purple)">
 									<span style="font-size: 2em">⇄</span><br /><b>PCIe</b><br />Subspace tunnel
 								</div>
 								<div class="lane" style="flex: 1">
@@ -197,7 +191,7 @@
 				<!-- 2. Copies                                                    -->
 				<!-- ============================================================ -->
 				<section>
-					<section data-background-color="#0b2545" class="divider">
+					<section class="divider">
 						<div class="num">02</div>
 						<h2>Today's data path</h2>
 						<p>Counting every payload copy in vsomeip 3.6.1, with E2E enabled</p>
@@ -387,7 +381,7 @@
 						</aside>
 					</section>
 
-					<section>
+					<section data-visibility="show-hidden">
 						<p class="kicker">Data path</p>
 						<h2>The coding copies</h2>
 						<div class="cols">
@@ -458,7 +452,7 @@
 				<!-- 3. Data ownership                                          -->
 				<!-- ============================================================ -->
 				<section>
-					<section data-background-color="#0b2545" class="divider">
+					<section class="divider">
 						<div class="num">03</div>
 						<h2>Data Ownership</h2>
 						<p>Who owns the sockets, and why discovery has to live somewhere else</p>
@@ -613,7 +607,7 @@
 						</aside>
 					</section>
 
-					<section>
+					<section data-visibility="show-hidden">
 						<p class="kicker">Data Ownership · GM design</p>
 						<h2>Lifecycle</h2>
 						<div class="tiles" style="font-size: 0.95em">
@@ -678,7 +672,7 @@
 				<!-- 4. E2E                                                        -->
 				<!-- ============================================================ -->
 				<section>
-					<section data-background-color="#0b2545" class="divider">
+					<section class="divider">
 						<div class="num">04</div>
 						<h2>E2E: scatter-gather</h2>
 						<p>Removing the copies the E2E API forces</p>
@@ -710,7 +704,7 @@
 								</code></pre>
 							</div>
 							<ul class="fs-sm tight fragment">
-								<li><b>Tight coupling (App <-> E2E profile):</b> every client needs to know header sizes and offsets, and a profile change means changing every app not just config!</li>
+								<li><b>Tight coupling (App &lt;-&gt; E2E profile):</b> every client needs to know header sizes and offsets, and a profile change means changing every app not just config!</li>
 								<li><b>Send:</b> 2 payload copies, one of them a full memmove.</li>
 								<li><b>Receive:</b> 1 copy to check the CRC, then the app strips the header itself.</li>
 							</ul>
@@ -725,7 +719,7 @@
 					</section>
 
 					<section>
-						<p class="kicker">E2E · API Change Proposal</p>
+						<p class="kicker">E2E · API Change Proposal #1</p>
 						<h2>The plugin returns pieces instead of mutating a buffer</h2>
 						<div class="cols">
 							<pre><code class="language-cpp" data-trim data-noescape>
@@ -764,7 +758,7 @@
 					</section>
 
 					<section>
-						<p class="kicker">E2E · proposal</p>
+						<p class="kicker">E2E · API Change Proposal #2</p>
 						<h2>Check returns spans; stripping is just a view</h2>
 						<p class="fs-xs"><b>One pinned receive buffer:</b></p>
 						<div class="bufstrip">
@@ -795,8 +789,8 @@
 					</section>
 
 					<section>
-						<p class="kicker">E2E · proposal</p>
-						<h2>Summary of changes</h2>
+						<p class="kicker">E2E · upstream ask #2</p>
+						<h2>Summary of proposal</h2>
 						<div class="cols">
 							<div>
 								<p class="fs-sm"><b class="green">Unchanged</b></p>
@@ -809,8 +803,7 @@
 								<ul class="fs-xs tight">
 									<li>Apps no longer leave holes. <span class="red">Breaking change:</span> Old apps that still do will get <b>two</b> headers on the wire.</li>
 									<li>Handlers receive hole-free data <span class="red">Breaking change:</span> Old apps need to stop applying offsets before deserializing.</li>
-									<li>OEMs may want to apply SecOCs on SOME/IP-SD messages too. New plugins can support the new functionality but not the stock ones.</li>
-									<li>Open item: SOME/IP-TP still flattens before splitting</li>
+									<li>OEMs may want to apply SecOCs on SOME/IP-SD messages too, via custom plugins.</li>
 								</ul>
 							</div>
 							<div>
@@ -820,14 +813,14 @@
 								</div>
 								<div class="tiles">
 									<div class="tile"><span class="big red">1 + app</span><span class="lbl">E2E receive copies before</span></div>
-									<div class="tile green"><span class="big">0</span><span class="lbl">after</span></div>
+									<div class="tile green"><span class="big">0*</span><span class="lbl">after</span></div>
 								</div>
-								<p class="small">Profile 01 packs CRC and counter in-band, so it still packs once.</p>
+								<div class="tiles">
+ 									<div class="tile"><span class="medium red">Tight e2e coupling</span><span class="lbl">E2E profile actuation in C++ and App code</span></div>
+									<div class="tile green"><span class="medium">No coupling</span><span class="lbl">Profile selection is config only</span></div>
+								</div>
+								<p class="small">*Profile 01 packs CRC and counter in-band, so it still packs once.</p>
 							</div>
-						</div>
-						<div class="takeaway fragment">
-							Discussion point: should the hole-free contract be opt-in behind a config flag during a
-							transition period?
 						</div>
 						<aside class="notes">
 							Verification: bazel test //test/unit_tests/e2e_tests and endpoint_tests, plus two-node
@@ -840,7 +833,7 @@
 				<!-- 5. Views not copies                                           -->
 				<!-- ============================================================ -->
 				<section>
-					<section data-background-color="#0b2545" class="divider">
+					<section class="divider">
 						<div class="num">05</div>
 						<h2><code style="background: none; color: #fff">shared_ptr</code> owns, views borrow</h2>
 						<p>An API style that removes the remaining copies</p>
@@ -1078,7 +1071,7 @@
 				<!-- 6. Threads                                                    -->
 				<!-- ============================================================ -->
 				<section>
-					<section id="threads" data-background-color="#0b2545" class="divider">
+					<section id="threads" class="divider">
 						<div class="num">06</div>
 						<h2>Threads: strands, not mutexes</h2>
 						<p>Using asio the way it was designed</p>
@@ -1131,7 +1124,7 @@
 						</ul>
 					</section>
 
-					<section data-auto-animate>
+					<section data-auto-animate data-visibility="show-hidden">
 						<p class="kicker">Threads · today</p>
 						<h2>A strand and a mutex guarding the same state</h2>
 						<pre data-id="cep-code" style="font-size: 0.46em"><code class="language-cpp" data-trim data-noescape data-line-numbers="|2,7|11,13|16-20">
@@ -1173,7 +1166,7 @@
 						</aside>
 					</section>
 
-					<section data-auto-animate>
+					<section data-auto-animate data-visibility="show-hidden">
 						<p class="kicker">Threads · rewrite</p>
 						<h2>The same code on the strand</h2>
 						<pre data-id="cep-code" style="font-size: 0.46em"><code class="language-cpp" data-trim data-noescape data-line-numbers="|2-3|13-14|17-20">
@@ -1275,7 +1268,7 @@
 						</aside>
 					</section>
 
-					<section>
+					<section data-visibility="show-hidden">
 						<p class="kicker">Threads · dispatchers sketch</p>
 						<h2>Plain callbacks inline, coroutines only on opt-in</h2>
 						<pre style="font-size: 0.46em"><code class="language-cpp" data-trim data-noescape data-line-numbers="|2-6|7-14">
@@ -1359,13 +1352,13 @@
 					</ul>
 				</section>
 
-				<section data-background-color="#0b2545" class="divider">
+				<section class="divider">
 					<h2>Questions?</h2>
 					<p>
 						Fork and design docs:
-						<a href="https://github.com/sgmenon/vsomeip" style="color: #7fb8ec">github.com/sgmenon/vsomeip</a>
+						<a href="https://github.com/sgmenon/vsomeip">github.com/sgmenon/vsomeip</a>
 					</p>
-					<ul style="color: #cfe3f7; font-size: 0.6em" class="tight">
+					<ul class="tight docs">
 						<li><span class="mono">documentation/standalone-service-discovery.md</span></li>
 						<li><span class="mono">documentation/e2e-scatter-gather-send.md</span></li>
 						<li><span class="mono">documentation/receive-copy-elision.md</span></li>
@@ -1379,16 +1372,43 @@
 		<script src="dist/plugin/notes.js"></script>
 		<script src="dist/plugin/highlight.js"></script>
 		<script>
+			// COVESA template backgrounds: photo title, photo dividers, white content slides with the footer bar
+			for (const s of document.querySelectorAll('.reveal .slides section:not(:has(> section))')) {
+				if ([...s.attributes].some((a) => a.name.startsWith('data-background'))) continue;
+				const kind = s.classList.contains('title-slide') ? 'title' : s.classList.contains('divider') ? 'section' : 'content';
+				s.dataset.backgroundImage = `talk/img/covesa/${kind}-bg.${kind === 'content' ? 'png' : 'jpg'}`;
+				s.dataset.backgroundSize = kind === 'content' ? 'contain' : 'cover';
+				const isOptional = s.dataset.visibility === 'show-hidden';
+				s.dataset.backgroundColor = kind !== 'content' ? '#2a5c8f' : isOptional ? '#eef0f3' : '#fff';
+			}
 			Reveal.initialize({
 				hash: true,
 				width: 1280,
 				height: 720,
 				margin: 0.05,
 				slideNumber: 'c/t',
+				controlsLayout: 'edges',
 				transition: 'fade',
 				transitionSpeed: 'fast',
 				pdfSeparateFragments: false,
 				plugins: [RevealHighlight, RevealNotes],
+			});
+			// Slides marked data-visibility="show-hidden" are optional. Reveal only drops data-visibility="hidden"
+			// slides once at startup, so ` detaches and reattaches them itself, then re-indexes with sync().
+			const optional = [...document.querySelectorAll('.reveal .slides section[data-visibility="show-hidden"]')].map(
+				(slide) => ({ slide, mark: document.createComment('optional slide') })
+			);
+			let optionalShown = true;
+			Reveal.addKeyBinding({ keyCode: 192, key: '`', description: 'Show or hide optional slides' }, () => {
+				optionalShown = !optionalShown;
+				const slides = Reveal.getSlides();
+				let i = slides.indexOf(Reveal.getCurrentSlide());
+				while (!optionalShown && i > 0 && optional.some((o) => o.slide === slides[i])) i--;
+				const target = slides[i];
+				for (const { slide, mark } of optional) optionalShown ? mark.replaceWith(slide) : slide.replaceWith(mark);
+				Reveal.sync();
+				const { h, v } = Reveal.getIndices(target);
+				Reveal.slide(h, v);
 			});
 		</script>
 		<script src="talk/vendor/chart.umd.min.js"></script>

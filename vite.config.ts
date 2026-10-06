@@ -3,6 +3,8 @@ import { ModuleFormat } from 'rollup';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { rewriteLegacyCoreDtsPath } from './build/dts-paths.ts';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const appendExtension = (format: ModuleFormat, name: String): string => {
 	if (format === 'es') {
@@ -21,7 +23,7 @@ export default defineConfig({
 		emptyOutDir: true,
 		lib: {
 			formats: ['es', 'umd'],
-			entry: resolve(__dirname, 'js/index.ts'),
+			entry: resolve(dirname(fileURLToPath(import.meta.url)), 'js/index.ts'),
 			name: 'Reveal',
 			fileName: (format, entryName) => {
 				return appendExtension(format, 'reveal');

@@ -61,7 +61,7 @@
 			zoom: {
 				zoom: {
 					wheel: { enabled: true },
-					drag: { enabled: true, backgroundColor: 'rgba(1, 112, 206, 0.12)', borderColor: color('--gm-blue'), borderWidth: 1 },
+					drag: { enabled: true, backgroundColor: 'rgba(0, 149, 166, 0.12)', borderColor: color('--accent'), borderWidth: 1 },
 					mode: 'xy',
 				},
 				limits: { x: { min: 0, max: maxMiB }, y: { min: y.min } },
@@ -86,8 +86,8 @@
 				datasets: [
 					line('UDP · 3.6.1', vsomeip.udp361, color('--ineff'), { borderDash: [4, 3] }),
 					line('UDP · fork', vsomeip.udpFork, color('--ineff')),
-					line('TCP · 3.6.1', vsomeip.tcp361, color('--gm-blue'), { borderDash: [4, 3] }),
-					line('TCP · fork', vsomeip.tcpFork, color('--gm-blue')),
+					line('TCP · 3.6.1', vsomeip.tcp361, color('--accent'), { borderDash: [4, 3] }),
+					line('TCP · fork', vsomeip.tcpFork, color('--accent')),
 				],
 			},
 			options: options(10, yLog),
@@ -115,7 +115,7 @@
 				type: 'line',
 				data: {
 					datasets: [
-						line('TCP: one message per frame', gain(vsomeip.tcp361, vsomeip.tcpFork), color('--gm-blue')),
+						line('TCP: one message per frame', gain(vsomeip.tcp361, vsomeip.tcpFork), color('--accent')),
 						line('UDP: one message per 1.4 KB', gain(vsomeip.udp361, vsomeip.udpFork), color('--ineff')),
 					],
 				},
@@ -127,9 +127,9 @@
 			data: {
 				datasets: [
 					line('vsomeip fork · UDP', vsomeip.udpFork.slice(0, 6), color('--ineff')),
-					line('vsomeip fork · TCP', vsomeip.tcpFork.slice(0, 6), color('--gm-blue')),
+					line('vsomeip fork · TCP', vsomeip.tcpFork.slice(0, 6), color('--accent')),
 					line('Cyclone DDS · RTPS/UDP', net.cyclone, color('--design')),
-					line('Zenoh · TCP', net.zenoh, '#7b2cbf'),
+					line('Zenoh · TCP', net.zenoh, color('--purple')),
 					line('Subspace · TCP', net.subspace, color('--zero')),
 				],
 			},

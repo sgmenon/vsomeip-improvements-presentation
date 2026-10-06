@@ -102,6 +102,7 @@
 		"presentation"
 	],
 	"devDependencies": {
+		"@fontsource-variable/open-sans": "^5.3.0",
 		"chart.js": "^4.5.1",
 		"chartjs-plugin-zoom": "^2.2.0",
 		"esbuild": "^0.28.1",

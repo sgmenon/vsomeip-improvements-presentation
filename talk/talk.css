@@ -1,23 +1,41 @@
 /* Theme overrides and diagram primitives for "How GM uses vsomeip in its ADAS stack". */
 
+@font-face {
+	font-family: 'Open Sans';
+	font-style: normal;
+	font-weight: 300 800;
+	font-display: block;
+	src: url('vendor/fonts/open-sans-latin-wght-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Open Sans';
+	font-style: italic;
+	font-weight: 300 800;
+	font-display: block;
+	src: url('vendor/fonts/open-sans-latin-wght-italic.woff2') format('woff2');
+}
+
+/* COVESA Fall AMM 2026 template palette: teal #00b1c3, blue #355e8a, purple #94519a */
 :root {
-	--gm-blue: #0170ce;
-	--gm-navy: #0b2545;
+	--accent: #0095a6; /* COVESA teal, darkened so white text and thin lines stay readable */
+	--accent-dark: #355e8a;
+	--purple: #94519a;
+	--slate: #34495e;
 	--ink: #1d2433;
 	--muted: #5c6b80;
-	--panel: #eef4fb;
-	--panel-edge: #b9cde4;
+	--panel: #edf6f8;
+	--panel-edge: #b3dbe2;
 
 	--ineff: #d62828; /* code inefficiency: removable without API change */
 	--design: #e89a1c; /* design copy: forced by API / architecture */
 	--kernel: #8d99ae; /* kernel socket copy */
 	--zero: #2a9d8f; /* eliminated / zero-copy */
 
-	--r-main-font: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-	--r-heading-font: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--r-main-font: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+	--r-heading-font: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 	--r-main-color: var(--ink);
-	--r-heading-color: var(--gm-navy);
-	--r-link-color: var(--gm-blue);
+	--r-heading-color: #111;
+	--r-link-color: var(--accent);
 	--r-heading-text-transform: none;
 	--r-heading-font-weight: 700;
 	--r-main-font-size: 30px;
@@ -54,7 +72,7 @@
 	color: var(--muted);
 }
 .reveal .kicker {
-	color: var(--gm-blue);
+	color: var(--accent);
 	font-weight: 700;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -64,7 +82,7 @@
 .reveal .takeaway {
 	margin-top: 0.7em;
 	padding: 0.45em 0.8em;
-	border-left: 6px solid var(--gm-blue);
+	border-left: 6px solid var(--accent);
 	background: var(--panel);
 	font-size: 0.8em;
 }
@@ -92,22 +110,79 @@
 	font-size: 0.88em;
 }
 
-/* Section divider slides */
-.reveal section.divider {
-	text-align: left;
+/* Content slides keep clear of the template's footer bar */
+.reveal .slides > section,
+.reveal .slides > section > section {
+	padding-bottom: 46px;
 }
-.reveal section.divider h2 {
-	font-size: 2em;
+
+/* Section divider slides: text sits bottom-left over the photo, as in the template */
+.reveal .slides section.divider {
+	text-align: left;
+	padding: 380px 0 0 120px;
 	color: #fff;
 }
+.reveal section.divider h2 {
+	font-size: 1.9em;
+	color: #fff;
+	margin-bottom: 0.2em;
+}
 .reveal section.divider p {
-	color: #cfe3f7;
+	color: #e4f4f7;
+	font-size: 0.8em;
+}
+.reveal section.divider a {
+	color: #fff;
+	text-decoration: underline;
 }
 .reveal section.divider .num {
-	font-size: 4em;
+	font-size: 3em;
 	font-weight: 800;
-	color: rgba(255, 255, 255, 0.18);
+	color: rgba(255, 255, 255, 0.35);
 	line-height: 1;
+}
+.reveal section.divider .docs {
+	color: #e4f4f7;
+	font-size: 0.55em;
+}
+
+/* Title slide: text column on the right of the photo */
+.reveal .slides section.title-slide {
+	padding: 60px 0 0 597px;
+	color: #fff;
+}
+.reveal section.title-slide .kicker {
+	color: #8fe3ec;
+}
+.reveal section.title-slide h1 {
+	font-size: 1.55em;
+	font-weight: 600;
+	line-height: 1.1;
+	color: #fff;
+	text-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
+}
+.reveal section.title-slide .sub {
+	font-size: 0.72em;
+	color: #fff;
+	text-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
+}
+.reveal section.title-slide .by {
+	font-size: 0.55em;
+	margin: 0.6em 0 0;
+	text-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
+}
+.reveal section.title-slide a {
+	color: #fff;
+}
+
+/* Slide number on the footer bar, where the template puts it */
+.reveal .slide-number {
+	right: 17.6%;
+	bottom: 2.5%;
+	background: none;
+	color: #fff;
+	font-family: var(--r-main-font);
+	font-size: 11px;
 }
 
 /* Two-column layout */
@@ -134,7 +209,7 @@
 	margin: 0.4em 0;
 }
 .reveal table th {
-	background: var(--gm-navy);
+	background: var(--accent-dark);
 	color: #fff;
 	border: none;
 	padding: 0.35em 0.6em;
@@ -181,7 +256,7 @@
 	left: 0.8em;
 	white-space: nowrap;
 	font-weight: 700;
-	color: var(--gm-navy);
+	color: var(--accent-dark);
 	letter-spacing: 0.02em;
 }
 .lane.solid {
@@ -213,7 +288,7 @@
 	flex: 1 1 0;
 	min-width: 0;
 	background: #fff;
-	border: 2px solid #34495e;
+	border: 2px solid var(--slate);
 	border-radius: 6px;
 	padding: 0.5em 0.5em 0.6em;
 	text-align: center;
@@ -235,13 +310,13 @@
 	color: var(--muted);
 }
 .blk.accent {
-	border-color: var(--gm-blue);
-	background: #e7f1fb;
+	border-color: var(--accent);
+	background: #e3f5f7;
 }
 .blk.wire {
-	background: #34495e;
+	background: var(--slate);
 	color: #fff;
-	border-color: #34495e;
+	border-color: var(--slate);
 }
 .blk.wire .s {
 	color: #d4dde8;
@@ -251,7 +326,7 @@
 	flex: 0 0 1.6em;
 	align-self: center;
 	text-align: center;
-	color: #34495e;
+	color: var(--slate);
 	font-size: 1.4em;
 	font-weight: 700;
 }
@@ -365,7 +440,7 @@
 .tile .big {
 	font-size: 1.9em;
 	font-weight: 800;
-	color: var(--gm-navy);
+	color: var(--accent-dark);
 	line-height: 1.05;
 	display: block;
 }
@@ -404,20 +479,20 @@
 	overflow: hidden;
 }
 .seg-shm {
-	background: var(--gm-blue);
+	background: var(--accent);
 }
 .seg-pcie {
-	background: #6a4c93;
+	background: var(--purple);
 }
 .seg-eth {
-	background: #34495e;
+	background: var(--slate);
 }
 
 /* Buffer strip (one contiguous buffer with views) */
 .bufstrip {
 	display: flex;
 	height: 2.4em;
-	border: 2px solid var(--gm-navy);
+	border: 2px solid var(--accent-dark);
 	border-radius: 4px;
 	overflow: hidden;
 	font-size: 0.55em;
@@ -427,8 +502,8 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	border-right: 2px solid var(--gm-navy);
-	color: var(--gm-navy);
+	border-right: 2px solid var(--accent-dark);
+	color: var(--accent-dark);
 }
 .bufstrip > div:last-child {
 	border-right: none;
@@ -436,7 +511,7 @@
 .seg-hdr {
 	flex: 0 0 15%;
 	white-space: nowrap;
-	background: #dbe7f5;
+	background: #dde7f2;
 }
 .seg-e2e {
 	flex: 0 0 11%;
@@ -480,7 +555,7 @@
 .strand .name {
 	flex: 0 0 8.5em;
 	font-weight: 700;
-	color: var(--gm-navy);
+	color: var(--accent-dark);
 }
 .h {
 	display: inline-block;
@@ -491,10 +566,10 @@
 	color: #fff;
 }
 .h.a {
-	background: var(--gm-blue);
+	background: var(--accent);
 }
 .h.b {
-	background: #6a4c93;
+	background: var(--purple);
 }
 .h.c {
 	background: var(--zero);
@@ -509,7 +584,7 @@
 }
 .thread {
 	flex: 1;
-	border: 2px solid #34495e;
+	border: 2px solid var(--slate);
 	border-radius: 6px;
 	padding: 0.35em;
 	text-align: center;
@@ -530,7 +605,7 @@
 	color: var(--design);
 }
 .blue {
-	color: var(--gm-blue);
+	color: var(--accent);
 }
 .mono {
 	font-family: var(--r-code-font);
